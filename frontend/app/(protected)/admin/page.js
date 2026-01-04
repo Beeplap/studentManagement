@@ -46,6 +46,7 @@ export default function AdminPage() {
   const [classes, setClasses] = useState([]);
   const [subjects, setSubjects] = useState([]);
   const [notices, setNotices] = useState([]);
+  const [fees, setFees] = useState([]);
   
   // Modal States
   const [showAddUser, setShowAddUser] = useState(false);
@@ -109,11 +110,20 @@ export default function AdminPage() {
       }
     } catch (e) { console.error("Subjects fetch error", e); }
 
-    // Mock Notices if table doesn't exist
-    setNotices([
-      { id: 1, title: "Mid-Term Exams", date: "2024-03-15", target: "All Students" },
-      { id: 2, title: "Staff Meeting", date: "2024-03-10", target: "Teachers" },
-    ]);
+    // Fetch Notices
+    const { data: noticesData } = await supabase.from("notices").select("*").order("date", { ascending: false });
+    if (noticesData) setNotices(noticesData);
+
+    // Fetch Fees
+    const { data: feesData } = await supabase
+      .from("fees")
+      .select("*, students(full_name, class)")
+      .order("created_at", { ascending: false });
+    
+    if (feesData) {
+        // Transform for display if needed
+        setFees(feesData); 
+    }
   };
 
   // --- Handlers ---
@@ -135,6 +145,27 @@ export default function AdminPage() {
     } catch (error) {
       alert("Error deleting user");
     }
+  };
+
+  const handleAddNotice = async () => {
+      const title = prompt("Enter Notice Title:");
+      if (!title) return;
+      
+      const target = prompt("Enter Target (All Students / Teachers):", "All Students");
+      
+      const { error } = await supabase.from("notices").insert([
+          { title, target, date: new Date().toISOString().split('T')[0] }
+      ]);
+      
+      if (error) alert("Error adding notice");
+      else fetchAllData();
+  };
+
+  const handleDeleteNotice = async (id) => {
+      if(!confirm("Delete this notice?")) return;
+      const { error } = await supabase.from("notices").delete().eq("id", id);
+      if (error) alert("Error deleting notice");
+      else fetchAllData();
   };
 
   // --- Render Helpers ---
@@ -408,15 +439,23 @@ export default function AdminPage() {
                       </tr>
                   </thead>
                   <tbody>
-                      {students.slice(0,5).map(s => (
-                          <tr key={s.id} className="border-b">
-                              <td className="px-6 py-4 font-medium">{s.full_name}</td>
-                              <td className="px-6 py-4">{s.class}</td>
-                              <td className="px-6 py-4">$500</td>
-                              <td className="px-6 py-4"><span className="bg-yellow-100 text-yellow-700 px-2 py-1 rounded text-xs">Pending</span></td>
+                      {fees.map(fee => (
+                          <tr key={fee.id} className="border-b">
+                              <td className="px-6 py-4 font-medium">{fee.students?.full_name || "Unknown"}</td>
+                              <td className="px-6 py-4">{fee.students?.class || "N/A"}</td>
+                              <td className="px-6 py-4">${fee.amount}</td>
+                              <td className="px-6 py-4">
+                                  <span className={`px-2 py-1 rounded text-xs ${
+                                      fee.status === 'Paid' ? 'bg-green-100 text-green-700' : 
+                                      fee.status === 'Overdue' ? 'bg-red-100 text-red-700' : 'bg-yellow-100 text-yellow-700'
+                                  }`}>
+                                      {fee.status}
+                                  </span>
+                              </td>
                               <td className="px-6 py-4"><Button size="sm" variant="outline">Remind</Button></td>
                           </tr>
                       ))}
+                      {fees.length === 0 && <tr><td colSpan="5" className="text-center py-4 text-gray-500">No fee records found</td></tr>}
                   </tbody>
               </table>
               </div>
@@ -456,9 +495,9 @@ export default function AdminPage() {
   // 8. Notices Component
   const renderNotices = () => (
       <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
-           <div className="flex justify-between items-center">
+             <div className="flex justify-between items-center">
              <h2 className="text-2xl font-bold">Notices & Announcements</h2>
-             <Button className="bg-purple-600"><Plus className="w-4 h-4 mr-2"/> Create Notice</Button>
+             <Button className="bg-purple-600" onClick={handleAddNotice}><Plus className="w-4 h-4 mr-2"/> Create Notice</Button>
          </div>
          <Card>
              <CardContent className="p-0">
@@ -468,7 +507,7 @@ export default function AdminPage() {
                              <h4 className="font-semibold text-gray-900">{n.title}</h4>
                              <p className="text-sm text-gray-500">Target: {n.target} • {n.date}</p>
                          </div>
-                         <Button variant="ghost" size="sm"><Trash2 className="w-4 h-4 text-red-500"/></Button>
+                         <Button variant="ghost" size="sm" onClick={() => handleDeleteNotice(n.id)}><Trash2 className="w-4 h-4 text-red-500"/></Button>
                      </div>
                  ))}
              </CardContent>
