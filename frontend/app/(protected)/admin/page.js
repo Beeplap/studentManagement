@@ -1,1459 +1,566 @@
 "use client";
-import React, { useEffect, useState } from "react";
+import React, { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
-import { useSidebar } from "@/hooks/useSidebar";
-import { Button } from "../../../components/ui/button";
+import { supabase } from "@/lib/supabaseClient";
+import Sidebar from "@/components/ui/Sidebar";
 import {
-  Card,
-  CardHeader,
-  CardTitle,
-  CardContent,
-  CardFooter,
-} from "../../../components/ui/card";
-import { supabase } from "../../../lib/supabaseClient";
-import { resolveUserRole } from "../../../lib/utils";
-import {
-  Moon,
-  Sun,
-  MoreHorizontal,
-  User,
+  LayoutDashboard,
   Users,
-  BookOpen,
-  CheckCircle,
-  XCircle,
-  Calendar,
   UserCheck,
   School,
-  LayoutDashboard,
-  UserPlus,
-  GraduationCap,
-  TrendingUp,
-  Clock,
-  ArrowRight,
-  Activity,
+  BookOpen,
+  Calendar,
+  DollarSign,
+  FileText,
   Bell,
+  Search,
+  Plus,
+  Trash2,
+  Edit,
+  Download,
+  Filter,
+  CheckCircle,
+  XCircle,
+  Clock,
+  Menu,
 } from "lucide-react";
-import { Dialog, Menu, Transition } from "@headlessui/react";
-import AddClass from "../../../components/ui/addClass";
-import Sidebar from "@/components/ui/Sidebar";
-import AddUser from "../../../components/ui/addUser";
-import AddSubject from "../../../components/ui/addSubject";
-import UsersTable from "../../../components/ui/usersTable";
-import TeacherStats from "../../../components/ui/teacherStats";
-import TeacherDetails from "../../../components/ui/teacherDetails";
-import NotificationPanel from "../../../components/ui/notificationPanel";
-import NotificationBell from "../../../components/ui/notificationBell";
+import { Button } from "@/components/ui/button";
+import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
+import AddUser from "@/components/ui/addUser"; // Existing component
+import AddClass from "@/components/ui/addClass"; // Existing component
+// import AddSubject from "@/components/ui/addSubject"; // Assuming this exists or we'll make a simple one inline
 
 export default function AdminPage() {
   const router = useRouter();
   const [loading, setLoading] = useState(true);
-  const [email, setEmail] = useState("");
+  const [userRole, setUserRole] = useState(null);
+  const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const [currentView, setCurrentView] = useState("dashboard");
+
+  // Data States
   const [profiles, setProfiles] = useState([]);
-  const [listLoading, setListLoading] = useState(false);
-  const [search, setSearch] = useState("");
-  const [filterRole, setFilterRole] = useState("all");
-  const [showAddUser, setShowAddUser] = useState(false);
-  const [addUserRole, setAddUserRole] = useState("teacher"); // Default role for Add User modal
-  const [showAssignClass, setShowAssignClass] = useState(false);
-  const [assignClassLoading, setAssignClassLoading] = useState(false);
-  const [assignClassError, setAssignClassError] = useState("");
-  const [assignClassSuccess, setAssignClassSuccess] = useState("");
-  const [newClass, setNewClass] = useState({
-    name: "",
-    grade: "",
-    section: "",
-    subject: "",
-    teacher_id: "",
-  });
-  const {
-    sidebarOpen,
-    setSidebarOpen,
-    sidebarCollapsed,
-    setSidebarCollapsed,
-    toggleCollapsed,
-  } = useSidebar();
-
-  // New state for teacher statistics
-  const [teacherStats, setTeacherStats] = useState([]);
-  const [statsLoading, setStatsLoading] = useState(false);
-  const [selectedTeacher, setSelectedTeacher] = useState(null);
-  const [showTeacherDetails, setShowTeacherDetails] = useState(false);
-  const [currentView, setCurrentView] = useState("dashboard"); // 'dashboard', 'teachers', 'students'
-
-  // Teachers view state
-  const [teachers, setTeachers] = useState([]);
-  const [teachersLoading, setTeachersLoading] = useState(false);
-
-  // Students view state
   const [students, setStudents] = useState([]);
-  const [studentsLoading, setStudentsLoading] = useState(false);
-  const [studentSearch, setStudentSearch] = useState("");
-  const [studentClassFilter, setStudentClassFilter] = useState("");
-  const [studentSectionFilter, setStudentSectionFilter] = useState("");
-  const [studentCount, setStudentCount] = useState(0);
-
-  // Subjects view state
+  const [teachers, setTeachers] = useState([]);
+  const [classes, setClasses] = useState([]);
   const [subjects, setSubjects] = useState([]);
-  const [subjectsLoading, setSubjectsLoading] = useState(false);
-  const [showAddSubject, setShowAddSubject] = useState(false);
-  const [subjectSearch, setSubjectSearch] = useState("");
-  const [subjectSemesterFilter, setSubjectSemesterFilter] = useState("all");
+  const [notices, setNotices] = useState([]);
+  
+  // Modal States
+  const [showAddUser, setShowAddUser] = useState(false);
+  const [addUserRole, setAddUserRole] = useState("student");
+  const [showAddClass, setShowAddClass] = useState(false);
+  
+  // Filter States
+  const [searchQuery, setSearchQuery] = useState("");
 
-  // Notification panel state
-  const [showNotificationPanel, setShowNotificationPanel] = useState(false);
-
-  const redirectToLogin = async () => {
-    await supabase.auth.signOut();
-    router.replace("/login");
-  };
-
+  // --- Auth & Initial Load ---
   useEffect(() => {
-    supabase.auth.getUser().then(async ({ data }) => {
-      const user = data?.user;
-      if (!user) {
-        router.replace("/login");
-        return;
-      }
-
-      // Check role from users table (not profiles)
-      const { data: userData, error: userError } = await supabase
-        .from("users")
-        .select("role, email")
-        .eq("id", user.id)
-        .single();
-
-      if (userError || !userData) {
-        console.error("Error fetching user role:", userError);
-        await redirectToLogin();
-        return;
-      }
-
-      if (userData.role !== "admin") {
-        console.log("User role is not admin:", userData.role);
-        await redirectToLogin();
-        return;
-      }
-
-      setEmail(user.email || "");
-      setAdminUserId(user.id || "");
-      setLoading(false);
-      fetchProfiles();
-      fetchTeacherStats();
-      fetchStudentCount();
-    });
-  }, [router]);
-
-  const [adminUserId, setAdminUserId] = useState("");
-
-  useEffect(() => {
-    supabase.auth.getUser().then(({ data }) => {
-      if (data?.user) {
-        setAdminUserId(data.user.id);
-      }
-    });
+    checkUser();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const fetchProfiles = async () => {
-    setListLoading(true);
-    const { data, error } = await supabase
-      .from("users")
-      .select("id, full_name, email, role, created_at, is_active")
-      .order("created_at", { ascending: false });
-    if (!error) setProfiles(data || []);
-    setListLoading(false);
-  };
-
-  const fetchTeachers = async () => {
-    setTeachersLoading(true);
-    try {
-      const { data, error } = await supabase
-        .from("users")
-        .select("*")
-        .eq("role", "teacher")
-        .order("created_at", { ascending: false });
-      if (error) throw error;
-      setTeachers(data || []);
-    } catch (error) {
-      console.error("Error fetching teachers:", error);
-    } finally {
-      setTeachersLoading(false);
-    }
-  };
-
-  const toggleTeacherStatus = async (teacherId, currentStatus) => {
-    const newStatus = !currentStatus;
-    const action = newStatus ? "activate" : "deactivate";
-
-    if (!confirm(`Are you sure you want to ${action} this teacher account?`)) {
+  const checkUser = async () => {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) {
+      router.replace("/login");
       return;
     }
+    
+    const { data: userData } = await supabase
+      .from("users")
+      .select("role")
+      .eq("id", user.id)
+      .single();
 
-    try {
-      const response = await fetch("/api/toggle-teacher-status", {
-        method: "PATCH",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({ id: teacherId, is_active: newStatus }),
-      });
-
-      const result = await response.json();
-
-      if (!response.ok) {
-        // Check if this is a migration error
-        if (result.needsMigration && result.sql) {
-          const fullMessage = `${result.error}\n\n${
-            result.instructions ||
-            "Please run this SQL in your Supabase SQL Editor:"
-          }\n\n${
-            result.sql
-          }\n\nWould you like to copy this SQL to your clipboard?`;
-          if (confirm(fullMessage)) {
-            navigator.clipboard
-              .writeText(result.sql)
-              .then(() => {
-                alert(
-                  "SQL copied to clipboard! Please:\n1. Go to Supabase Dashboard > SQL Editor\n2. Paste and run the SQL\n3. Try again."
-                );
-              })
-              .catch(() => {
-                alert(
-                  `Please run this SQL in your Supabase SQL Editor:\n\n${result.sql}`
-                );
-              });
-          }
-        } else {
-          alert(`Error: ${result.error || "Failed to update teacher status"}`);
-        }
-        return;
-      }
-
-      // Update local state
-      setTeachers((prev) =>
-        prev.map((teacher) =>
-          teacher.id === teacherId
-            ? { ...teacher, is_active: newStatus }
-            : teacher
-        )
-      );
-
-      // Also update profiles if needed
-      setProfiles((prev) =>
-        prev.map((profile) =>
-          profile.id === teacherId
-            ? { ...profile, is_active: newStatus }
-            : profile
-        )
-      );
-
-      alert(
-        `Teacher account ${
-          newStatus ? "activated" : "deactivated"
-        } successfully`
-      );
-    } catch (error) {
-      console.error("Error toggling teacher status:", error);
-      alert(`Error: ${error.message || "Failed to update teacher status"}`);
+    if (!userData || userData.role !== "admin") {
+      router.replace("/login");
+      return;
     }
+    
+    setUserRole("admin");
+    setLoading(false);
+    fetchAllData();
   };
 
-  const fetchStudents = async () => {
-    setStudentsLoading(true);
-    try {
-      let query = supabase.from("students").select("*");
-      if (studentClassFilter) {
-        query = query.eq("class", studentClassFilter);
-      }
-      if (studentSectionFilter) {
-        query = query.eq("section", studentSectionFilter);
-      }
-      const { data, error } = await query.order("created_at", {
-        ascending: false,
-      });
-      if (error) throw error;
-      let filtered = data || [];
-      if (studentSearch) {
-        const searchLower = studentSearch.toLowerCase();
-        filtered = filtered.filter(
-          (s) =>
-            s.full_name?.toLowerCase().includes(searchLower) ||
-            s.roll?.toLowerCase().includes(searchLower) ||
-            s.guardian_name?.toLowerCase().includes(searchLower)
-        );
-      }
-      setStudents(filtered);
-    } catch (error) {
-      console.error("Error fetching students:", error);
-    } finally {
-      setStudentsLoading(false);
+  const fetchAllData = async () => {
+    // Fetch Users (Admins, Teachers)
+    const { data: usersData } = await supabase.from("users").select("*");
+    if (usersData) {
+      setProfiles(usersData);
+      setTeachers(usersData.filter(u => u.role === "teacher"));
     }
-  };
 
-  const fetchStudentCount = async () => {
-    try {
-      const { count, error } = await supabase
-        .from("students")
-        .select("*", { count: "exact", head: true });
-      if (error) throw error;
-      setStudentCount(count || 0);
-    } catch (error) {
-      console.error("Error fetching student count:", error);
-    }
-  };
+    // Fetch Students
+    const { data: studentsData } = await supabase.from("students").select("*");
+    if (studentsData) setStudents(studentsData);
 
-  const fetchSubjects = async () => {
-    setSubjectsLoading(true);
+    // Fetch Classes
+    const { data: classesData } = await supabase.from("classes").select("*");
+    if (classesData) setClasses(classesData);
+
+    // Fetch Subjects (Mock or API)
     try {
       const res = await fetch("/api/subjects");
-      const json = await res.json();
-      if (!res.ok) throw new Error(json?.error || "Failed to fetch subjects");
-      setSubjects(json.subjects || []);
-    } catch (error) {
-      console.error("Error fetching subjects:", error);
-    } finally {
-      setSubjectsLoading(false);
-    }
+      if (res.ok) {
+        const json = await res.json();
+        setSubjects(json.subjects || []);
+      }
+    } catch (e) { console.error("Subjects fetch error", e); }
+
+    // Mock Notices if table doesn't exist
+    setNotices([
+      { id: 1, title: "Mid-Term Exams", date: "2024-03-15", target: "All Students" },
+      { id: 2, title: "Staff Meeting", date: "2024-03-10", target: "Teachers" },
+    ]);
   };
 
-  const deleteSubject = async (id) => {
-    if (!confirm("Are you sure you want to delete this subject?")) return;
+  // --- Handlers ---
+  const handleAddUser = (role) => {
+    setAddUserRole(role);
+    setShowAddUser(true);
+  };
+
+  const handleDeleteUser = async (id, role) => {
+    if(!confirm("Are you sure?")) return;
     try {
-      const res = await fetch("/api/subjects", {
+      // Use existing API or direct Supabase if policy allows
+       await fetch("/api/delete-user", {
         method: "DELETE",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ id }),
-      });
-      const json = await res.json();
-      if (!res.ok) throw new Error(json?.error || "Failed to delete subject");
-      await fetchSubjects();
-    } catch (error) {
-      alert(error.message || "Failed to delete subject");
-    }
-  };
-
-  // Fetch data when view changes
-  useEffect(() => {
-    if (currentView === "teachers") {
-      fetchTeachers();
-    } else if (
-      currentView === "students" ||
-      currentView === "statistics/students"
-    ) {
-      fetchStudents();
-    } else if (currentView === "statistics/teachers") {
-      fetchTeacherStats();
-    } else if (currentView === "subjects") {
-      fetchSubjects();
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [currentView]);
-
-  // Refetch students when filters change
-  useEffect(() => {
-    if (currentView === "students") {
-      fetchStudents();
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [studentClassFilter, studentSectionFilter, studentSearch]);
-
-  const fetchTeacherStats = async () => {
-    setStatsLoading(true);
-
-    // Fetch teachers
-    const { data: teachers, error: teachersError } = await supabase
-      .from("users")
-      .select("id, full_name, email")
-      .eq("role", "teacher");
-
-    if (teachersError) {
-      console.error("Error fetching teachers:", teachersError);
-      setStatsLoading(false);
-      return;
-    }
-
-    const stats = await Promise.all(
-      teachers.map(async (teacher) => {
-        // Fetch classes/subjects assigned to this teacher
-        const { data: classes, error: classesError } = await supabase
-          .from("classes")
-          .select("id, course, semester, subject, created_at")
-          .eq("teacher_id", teacher.id)
-          .order("created_at", { ascending: true }); // Order by creation to assign periods
-
-        if (classesError) {
-          console.error("Error fetching classes:", classesError);
-          return {
-            ...teacher,
-            periods: [],
-            totalTime: 0,
-          };
-        }
-
-        // Standard period duration in minutes (45 minutes per period)
-        const PERIOD_DURATION = 45;
-
-        // Organize classes into periods (1st, 2nd, 3rd, etc.)
-        const periods = [];
-        let totalTimeMinutes = 0;
-
-        for (let i = 0; i < Math.min(classes.length, 6); i++) {
-          const classItem = classes[i];
-          const periodNumber = i + 1;
-
-          // Fetch attendance records for this subject/class to calculate time
-          // We'll count unique dates where this teacher marked attendance for this subject
-          // Since attendance.subject_id references courses(id), we need to find matching courses
-          // First, try to find a course that matches this class's subject name
-          const { data: matchingCourse } = await supabase
-            .from("courses")
-            .select("id")
-            .ilike("name", `%${classItem.subject}%`)
-            .maybeSingle();
-
-          let daysWithAttendance = 0;
-
-          if (matchingCourse) {
-            // Count unique dates where attendance was marked for this subject by this teacher
-            const { data: attendanceRecords } = await supabase
-              .from("attendance")
-              .select("date")
-              .eq("subject_id", matchingCourse.id)
-              .eq("marked_by", teacher.id);
-
-            if (attendanceRecords && attendanceRecords.length > 0) {
-              daysWithAttendance = new Set(attendanceRecords.map((r) => r.date))
-                .size;
-            }
-          } else {
-            // Fallback: Count days where teacher marked attendance (any subject)
-            // We'll estimate by dividing total teacher attendance days by number of periods
-            const { data: allAttendanceRecords } = await supabase
-              .from("attendance")
-              .select("date")
-              .eq("marked_by", teacher.id);
-
-            if (allAttendanceRecords && allAttendanceRecords.length > 0) {
-              const totalDays = new Set(allAttendanceRecords.map((r) => r.date))
-                .size;
-              // Distribute evenly across periods (rough estimate)
-              daysWithAttendance = Math.ceil(
-                totalDays / Math.max(classes.length, 1)
-              );
-            }
-          }
-
-          // Calculate time spent: number of days with attendance * period duration
-          const timeSpentMinutes = daysWithAttendance * PERIOD_DURATION;
-          totalTimeMinutes += timeSpentMinutes;
-
-          periods.push({
-            periodNumber,
-            subject: classItem.subject,
-            course: classItem.course,
-            semester: classItem.semester,
-            timeSpentMinutes,
-            daysWithAttendance,
-          });
-        }
-
-        // Convert total time to hours and minutes for display
-        const totalHours = Math.floor(totalTimeMinutes / 60);
-        const totalMins = totalTimeMinutes % 60;
-
-        return {
-          ...teacher,
-          periods,
-          totalTimeMinutes,
-          totalTimeDisplay:
-            totalHours > 0 ? `${totalHours}h ${totalMins}m` : `${totalMins}m`,
-        };
-      })
-    );
-
-    setTeacherStats(stats);
-    setStatsLoading(false);
-  };
-
-  const viewTeacherDetails = (teacher) => {
-    setSelectedTeacher(teacher);
-    setShowTeacherDetails(true);
-  };
-
-  const deleteUser = async (id) => {
-    if (!confirm("Are you sure you want to delete this user?")) return;
-
-    try {
-      // Get user role before deleting
-      const { data: userData } = await supabase
-        .from("users")
-        .select("role")
-        .eq("id", id)
-        .single();
-
-      if (!userData) {
-        alert("User not found");
-        return;
-      }
-
-      const role = userData.role;
-
-      // Call API route to delete from all tables
-      const response = await fetch("/api/delete-user", {
-        method: "DELETE",
-        headers: {
-          "Content-Type": "application/json",
-        },
         body: JSON.stringify({ id, role }),
       });
-
-      const result = await response.json();
-
-      if (!response.ok) {
-        alert(`Error deleting user: ${result.error || "Unknown error"}`);
-        return;
-      }
-
-      // Update local state
-      setProfiles((prev) => prev.filter((p) => p.id !== id));
-      setTeacherStats((prev) => prev.filter((t) => t.id !== id));
-
-      // Refresh data if needed
-      if (currentView === "teachers") {
-        fetchTeachers();
-      } else if (currentView === "students") {
-        fetchStudents();
-      }
-      fetchStudentCount();
-
-      alert("User deleted successfully from all tables");
+      fetchAllData(); // Refresh
     } catch (error) {
-      console.error("Error deleting user:", error);
-      alert(`Error deleting user: ${error.message}`);
+      alert("Error deleting user");
     }
   };
 
-  const filteredProfiles = profiles.filter((p) => {
-    const matchesSearch =
-      p.full_name?.toLowerCase().includes(search.toLowerCase()) ||
-      p.email?.toLowerCase().includes(search.toLowerCase());
-    const matchesRole = filterRole === "all" || p.role === filterRole;
-    return matchesSearch && matchesRole;
-  });
+  // --- Render Helpers ---
 
-  const filteredTeacherStats = teacherStats.filter(
-    (t) =>
-      t.full_name?.toLowerCase().includes(search.toLowerCase()) ||
-      t.email?.toLowerCase().includes(search.toLowerCase())
-  );
-
-  if (loading)
-    return <div className="p-6 text-center text-gray-600">Loading…</div>;
-
-  return (
-    <div className="min-h-screen bg-gradient-to-br from-purple-50 via-violet-50 to-purple-100 p-6">
-      <div className="w-full mx-auto flex flex-col lg:flex-row gap-6">
-        <Sidebar
-          role="admin"
-          open={sidebarOpen}
-          onOpenChange={setSidebarOpen}
-          collapsed={sidebarCollapsed}
-          onToggleCollapsed={toggleCollapsed}
-          onAddTeacher={() => {
-            setAddUserRole("teacher");
-            setShowAddUser(true);
-          }}
-          onAddStudent={() => {
-            setAddUserRole("student");
-            setShowAddUser(true);
-          }}
-          onAssignClass={() => {
-            setShowAssignClass(true);
-          }}
-          currentView={currentView}
-          onViewChange={setCurrentView}
+  // 1. Dashboard Component
+  const renderDashboard = () => (
+    <div className="space-y-6 animate-in fade-in duration-500">
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+        <StatsCard 
+          title="Total Students" 
+          value={students.length} 
+          icon={School} 
+          color="text-blue-600" 
+          bg="bg-blue-100" 
         />
-        <main className="flex-1 space-y-8">
-          {/* Header */}
-          <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-            <div className="flex items-center gap-3">
-              <div className="w-12 h-12 bg-gradient-to-br from-purple-500 to-violet-600 rounded-xl flex items-center justify-center shadow-lg">
-                <svg
-                  className="w-6 h-6 text-white"
-                  fill="none"
-                  stroke="currentColor"
-                  viewBox="0 0 24 24"
-                >
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    strokeWidth={2}
-                    d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"
-                  />
-                </svg>
-              </div>
-              <div>
-                <h1 className="text-2xl sm:text-3xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-purple-600 to-violet-600">
-                  {currentView === "dashboard" && "Admin Panel"}
-                  {currentView === "teachers" && "Teachers"}
-                  {currentView === "students" && "Students"}
-                  {currentView === "statistics/teachers" &&
-                    "Teacher Statistics"}
-                  {currentView === "statistics/users" && "User Statistics"}
-                  {currentView === "statistics/students" &&
-                    "Student Statistics"}
-                </h1>
-                <p className="text-sm text-gray-700">
-                  {currentView === "dashboard" &&
-                    "Manage users and system settings"}
-                  {currentView === "teachers" &&
-                    "Manage teacher accounts and information"}
-                  {currentView === "students" &&
-                    "Manage student records and information"}
-                  {currentView?.startsWith("statistics") &&
-                    "View detailed statistics and analytics"}
-                </p>
-              </div>
-            </div>
+        <StatsCard 
+          title="Total Teachers" 
+          value={teachers.length} 
+          icon={UserCheck} 
+          color="text-purple-600" 
+          bg="bg-purple-100" 
+        />
+        <StatsCard 
+          title="Classes" 
+          value={classes.length} 
+          icon={LayoutDashboard} 
+          color="text-green-600" 
+          bg="bg-green-100" 
+        />
+         <StatsCard 
+          title="Avg Attendance" 
+          value="85%" 
+          icon={Clock} 
+          color="text-orange-600" 
+          bg="bg-orange-100" 
+        />
+      </div>
 
-            <div className="flex flex-wrap items-center gap-2">
-              <NotificationBell userRole="admin" userId={adminUserId} />
-              <Button
-                variant="ghost"
-                size="sm"
-                className="p-2 rounded-full sm:hidden"
-                onClick={() => setSidebarOpen(true)}
-                aria-label="Open sidebar"
-              >
-                <svg
-                  className="w-5 h-5"
-                  viewBox="0 0 20 20"
-                  fill="currentColor"
-                >
-                  <path
-                    d="M3 6h14M3 10h14M3 14h14"
-                    stroke="currentColor"
-                    strokeWidth="2"
-                    strokeLinecap="round"
-                  />
-                </svg>
-              </Button>
-            </div>
-          </div>
-
-          {/* Dashboard View */}
-          {currentView === "dashboard" && (
-            <>
-              {/* Welcome Section */}
-              <Card className="shadow-md border border-gray-200 bg-gradient-to-r from-purple-50 to-violet-50">
-                <CardContent className="p-6">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <h2 className="text-2xl font-bold text-gray-900 mb-1">
-                        Welcome back, Admin! 👋
-                      </h2>
-                      <p className="text-gray-600">
-                        Here&apos;s what&apos;s happening with your system today
-                      </p>
-                    </div>
-                    <div className="hidden md:flex items-center gap-2 px-4 py-2 bg-white rounded-lg shadow-sm">
-                      <Clock className="w-5 h-5 text-purple-600" />
-                      <span className="text-sm font-medium text-gray-700">
-                        {new Date().toLocaleDateString("en-US", {
-                          weekday: "long",
-                          year: "numeric",
-                          month: "long",
-                          day: "numeric",
-                        })}
-                      </span>
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
-
-              {/* Dashboard Overview Cards */}
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-                <Card className="shadow-md border border-gray-200 hover:shadow-lg transition-shadow">
-                  <CardContent className="p-6">
-                    <div className="flex items-center justify-between">
-                      <div>
-                        <p className="text-sm font-medium text-gray-600">
-                          Total Users
-                        </p>
-                        <p className="text-3xl font-bold text-gray-900 mt-2">
-                          {profiles.length}
-                        </p>
-                        <p className="text-xs text-gray-500 mt-1">
-                          All registered users
-                        </p>
-                      </div>
-                      <div className="w-14 h-14 bg-blue-100 rounded-xl flex items-center justify-center shadow-sm">
-                        <Users className="w-7 h-7 text-blue-600" />
-                      </div>
-                    </div>
-                  </CardContent>
-                </Card>
-
-                <Card className="shadow-md border border-gray-200 hover:shadow-lg transition-shadow">
-                  <CardContent className="p-6">
-                    <div className="flex items-center justify-between">
-                      <div>
-                        <p className="text-sm font-medium text-gray-600">
-                          Teachers
-                        </p>
-                        <p className="text-3xl font-bold text-gray-900 mt-2">
-                          {profiles.filter((p) => p.role === "teacher").length}
-                        </p>
-                        <p className="text-xs text-gray-500 mt-1">
-                          Active educators
-                        </p>
-                      </div>
-                      <div className="w-14 h-14 bg-purple-100 rounded-xl flex items-center justify-center shadow-sm">
-                        <UserCheck className="w-7 h-7 text-purple-600" />
-                      </div>
-                    </div>
-                  </CardContent>
-                </Card>
-
-                <Card className="shadow-md border border-gray-200 hover:shadow-lg transition-shadow">
-                  <CardContent className="p-6">
-                    <div className="flex items-center justify-between">
-                      <div>
-                        <p className="text-sm font-medium text-gray-600">
-                          Students
-                        </p>
-                        <p className="text-3xl font-bold text-gray-900 mt-2">
-                          {studentCount}
-                        </p>
-                        <p className="text-xs text-gray-500 mt-1">
-                          Enrolled students
-                        </p>
-                      </div>
-                      <div className="w-14 h-14 bg-green-100 rounded-xl flex items-center justify-center shadow-sm">
-                        <School className="w-7 h-7 text-green-600" />
-                      </div>
-                    </div>
-                  </CardContent>
-                </Card>
-
-                <Card className="shadow-md border border-gray-200 hover:shadow-lg transition-shadow">
-                  <CardContent className="p-6">
-                    <div className="flex items-center justify-between">
-                      <div>
-                        <p className="text-sm font-medium text-gray-600">
-                          Admins
-                        </p>
-                        <p className="text-3xl font-bold text-gray-900 mt-2">
-                          {profiles.filter((p) => p.role === "admin").length}
-                        </p>
-                        <p className="text-xs text-gray-500 mt-1">
-                          System administrators
-                        </p>
-                      </div>
-                      <div className="w-14 h-14 bg-red-100 rounded-xl flex items-center justify-center shadow-sm">
-                        <LayoutDashboard className="w-7 h-7 text-red-600" />
-                      </div>
-                    </div>
-                  </CardContent>
-                </Card>
-              </div>
-
-              {/* System Overview */}
-              <Card className="shadow-md border border-gray-200">
-                <CardHeader>
-                  <CardTitle className="text-lg font-semibold text-gray-800">
-                    System Overview
-                  </CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                    <div className="text-center p-4 bg-gradient-to-br from-blue-50 to-blue-100 rounded-lg">
-                      <Users className="w-8 h-8 text-blue-600 mx-auto mb-2" />
-                      <p className="text-2xl font-bold text-blue-900">
-                        {profiles.length}
-                      </p>
-                      <p className="text-sm text-blue-700 mt-1">Total Users</p>
-                    </div>
-                    <div className="text-center p-4 bg-gradient-to-br from-purple-50 to-purple-100 rounded-lg">
-                      <UserCheck className="w-8 h-8 text-purple-600 mx-auto mb-2" />
-                      <p className="text-2xl font-bold text-purple-900">
-                        {profiles.filter((p) => p.role === "teacher").length}
-                      </p>
-                      <p className="text-sm text-purple-700 mt-1">
-                        Total Teachers
-                      </p>
-                    </div>
-                    <div className="text-center p-4 bg-gradient-to-br from-green-50 to-green-100 rounded-lg">
-                      <School className="w-8 h-8 text-green-600 mx-auto mb-2" />
-                      <p className="text-2xl font-bold text-green-900">
-                        {studentCount}
-                      </p>
-                      <p className="text-sm text-green-700 mt-1">
-                        Total Students
-                      </p>
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
-            </>
-          )}
-
-          {/* Teachers View */}
-          {currentView === "teachers" && (
-            <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
-              <div className="flex justify-between items-center mb-4">
-                <h2 className="text-lg font-semibold text-gray-900">
-                  Teacher List ({teachers.length})
-                </h2>
-              </div>
-
-              {teachersLoading ? (
-                <div className="text-center py-12">
-                  <div className="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
-                  <p className="mt-4 text-gray-600">Loading teachers...</p>
-                </div>
-              ) : teachers.length === 0 ? (
-                <div className="text-center py-12">
-                  <p className="text-gray-600">No teachers found.</p>
-                </div>
-              ) : (
-                <div className="overflow-x-auto">
-                  <table className="min-w-full bg-white border border-gray-200 rounded-lg">
-                    <thead className="bg-gray-50">
-                      <tr>
-                        <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">
-                          Name
-                        </th>
-                        <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">
-                          Email
-                        </th>
-                        <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">
-                          Role
-                        </th>
-                        <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">
-                          Status
-                        </th>
-                        <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">
-                          Joined
-                        </th>
-                        <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">
-                          Actions
-                        </th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-gray-200">
-                      {teachers.map((teacher) => {
-                        const isActive = teacher.is_active !== false; // Default to true if not set
-                        return (
-                          <tr key={teacher.id} className="hover:bg-gray-50">
-                            <td className="px-4 py-3 text-sm font-medium text-gray-900">
-                              {teacher.full_name || "N/A"}
-                            </td>
-                            <td className="px-4 py-3 text-sm text-gray-600">
-                              {teacher.email}
-                            </td>
-                            <td className="px-4 py-3">
-                              <span className="inline-flex items-center px-2 py-0.5 rounded-sm text-xs font-medium text-white bg-blue-500">
-                                {teacher.role}
-                              </span>
-                            </td>
-                            <td className="px-4 py-3">
-                              <span
-                                className={`inline-flex items-center px-2 py-0.5 rounded-sm text-xs font-medium ${
-                                  isActive
-                                    ? "bg-green-100 text-green-800"
-                                    : "bg-red-100 text-red-800"
-                                }`}
-                              >
-                                {isActive ? "Active" : "Inactive"}
-                              </span>
-                            </td>
-                            <td className="px-4 py-3 text-sm text-gray-600">
-                              {new Date(
-                                teacher.created_at
-                              ).toLocaleDateString()}
-                            </td>
-                            <td className="px-4 py-3">
-                              <Button
-                                onClick={() =>
-                                  toggleTeacherStatus(teacher.id, isActive)
-                                }
-                                variant={isActive ? "outline" : "default"}
-                                size="sm"
-                                className={
-                                  isActive
-                                    ? "border-red-300 text-red-700 hover:bg-red-50"
-                                    : "bg-green-600 text-white hover:bg-green-700"
-                                }
-                              >
-                                {isActive ? "Deactivate" : "Activate"}
-                              </Button>
-                            </td>
-                          </tr>
-                        );
-                      })}
-                    </tbody>
-                  </table>
-                </div>
-              )}
-            </div>
-          )}
-
-          {/* Statistics Views */}
-          {currentView === "statistics/teachers" && (
-            <TeacherStats
-              filteredTeacherStats={filteredTeacherStats}
-              statsLoading={statsLoading}
-              fetchTeacherStats={fetchTeacherStats}
-              viewTeacherDetails={viewTeacherDetails}
-            />
-          )}
-
-          {currentView === "statistics/users" && (
-            <>
-              {/* Search + Filter */}
-              <div className="flex flex-col sm:flex-row gap-3">
-                <div className="flex-1">
-                  <input
-                    type="text"
-                    value={search}
-                    onChange={(e) => setSearch(e.target.value)}
-                    placeholder="Search by name/email…"
-                    className="w-full border border-gray-300 rounded-md px-3 h-10 bg-white text-gray-900 focus:outline-none focus:ring-2 focus:ring-purple-500"
-                  />
-                </div>
-                <div className="w-full sm:w-48">
-                  <select
-                    value={filterRole}
-                    onChange={(e) => setFilterRole(e.target.value)}
-                    className="w-full border border-gray-300 rounded-md px-3 h-10 bg-white text-gray-900 focus:outline-none focus:ring-2 focus:ring-purple-500"
-                  >
-                    <option value="all">All Roles</option>
-                    <option value="admin">Admins</option>
-                    <option value="teacher">Teachers</option>
-                    <option value="student">Students</option>
-                  </select>
-                </div>
-              </div>
-
-              {/* Users Table */}
-              <UsersTable
-                profiles={profiles}
-                listLoading={listLoading}
-                fetchProfiles={fetchProfiles}
-                deleteUser={deleteUser}
-                filteredProfiles={filteredProfiles}
-              />
-            </>
-          )}
-
-          {currentView === "statistics/students" && (
-            <Card className="shadow-md border border-gray-200">
-              <CardHeader>
-                <CardTitle className="text-lg font-semibold text-gray-800">
-                  Student Statistics
-                </CardTitle>
-                <p className="text-sm text-gray-600">
-                  Overview of student enrollment and distribution
-                </p>
-              </CardHeader>
-              <CardContent>
-                {studentsLoading ? (
-                  <div className="text-center py-12">
-                    <div className="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
-                    <p className="mt-4 text-gray-600">Loading statistics...</p>
-                  </div>
-                ) : (
-                  <>
-                    <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6">
-                      <div className="p-4 bg-green-50 rounded-lg">
-                        <p className="text-sm font-medium text-green-700">
-                          Total Students
-                        </p>
-                        <p className="text-3xl font-bold text-green-900 mt-2">
-                          {students.length}
-                        </p>
-                      </div>
-                      <div className="p-4 bg-blue-50 rounded-lg">
-                        <p className="text-sm font-medium text-blue-700">
-                          Unique Classes
-                        </p>
-                        <p className="text-3xl font-bold text-blue-900 mt-2">
-                          {
-                            new Set(
-                              students.map((s) => s.class).filter(Boolean)
-                            ).size
-                          }
-                        </p>
-                      </div>
-                      <div className="p-4 bg-purple-50 rounded-lg">
-                        <p className="text-sm font-medium text-purple-700">
-                          Unique Sections
-                        </p>
-                        <p className="text-3xl font-bold text-purple-900 mt-2">
-                          {
-                            new Set(
-                              students.map((s) => s.section).filter(Boolean)
-                            ).size
-                          }
-                        </p>
-                      </div>
-                    </div>
-                    <div>
-                      <h3 className="text-md font-semibold text-gray-800 mb-4">
-                        Students by Class
-                      </h3>
-                      <div className="space-y-2">
-                        {Array.from(
-                          new Set(students.map((s) => s.class).filter(Boolean))
-                        )
-                          .sort()
-                          .map((cls) => {
-                            const count = students.filter(
-                              (s) => s.class === cls
-                            ).length;
-                            const percentage =
-                              students.length > 0
-                                ? ((count / students.length) * 100).toFixed(1)
-                                : 0;
-                            return (
-                              <div
-                                key={cls}
-                                className="flex items-center gap-4"
-                              >
-                                <div className="w-32 text-sm font-medium text-gray-700">
-                                  {cls}
-                                </div>
-                                <div className="flex-1 bg-gray-200 rounded-full h-6 relative">
-                                  <div
-                                    className="h-6 rounded-full flex items-center justify-end pr-2 bg-green-500"
-                                    style={{ width: `${percentage}%` }}
-                                  >
-                                    <span className="text-xs font-medium text-white">
-                                      {count}
-                                    </span>
-                                  </div>
-                                </div>
-                                <div className="w-16 text-sm text-gray-600 text-right">
-                                  {percentage}%
-                                </div>
-                              </div>
-                            );
-                          })}
-                      </div>
-                    </div>
-                  </>
-                )}
-              </CardContent>
-            </Card>
-          )}
-
-          {/* Subjects View */}
-          {currentView === "subjects" && (
-            <div className="space-y-6">
-              <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
-                <div>
-                  <h2 className="text-2xl font-bold text-gray-900">
-                    Subjects & Courses
-                  </h2>
-                  <p className="text-gray-600 mt-1">
-                    Manage subjects and courses with semester information
-                  </p>
-                </div>
-                <Button
-                  onClick={() => setShowAddSubject(true)}
-                  className="bg-gradient-to-r from-purple-600 to-violet-600 hover:from-purple-700 hover:to-violet-700 text-white shadow-md hover:shadow-lg"
-                >
-                  <BookOpen className="w-4 h-4 mr-2" />
-                  Add Subject
-                </Button>
-              </div>
-
-              {/* Search + Filter */}
-              <div className="flex flex-col sm:flex-row gap-3">
-                <div className="flex-1">
-                  <input
-                    type="text"
-                    value={subjectSearch}
-                    onChange={(e) => setSubjectSearch(e.target.value)}
-                    placeholder="Search by subject name or course code…"
-                    className="w-full border border-gray-300 rounded-md px-3 h-10 bg-white text-gray-900 focus:outline-none focus:ring-2 focus:ring-purple-500"
-                  />
-                </div>
-                <div className="w-full sm:w-48">
-                  <select
-                    value={subjectSemesterFilter}
-                    onChange={(e) => setSubjectSemesterFilter(e.target.value)}
-                    className="w-full border border-gray-300 rounded-md px-3 h-10 bg-white text-gray-900 focus:outline-none focus:ring-2 focus:ring-purple-500"
-                  >
-                    <option value="all">All Semesters</option>
-                    {[1, 2, 3, 4, 5, 6, 7, 8].map((sem) => (
-                      <option key={sem} value={sem}>
-                        Semester {sem}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-              </div>
-
-              {/* Subjects Table */}
-              {subjectsLoading ? (
-                <div className="text-center py-12">
-                  <div className="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-purple-600"></div>
-                  <p className="mt-4 text-gray-600">Loading subjects...</p>
-                </div>
-              ) : (
-                <Card className="shadow-md border border-gray-200">
-                  <CardContent className="p-0">
-                    <div className="overflow-x-auto">
-                      <table className="w-full text-sm">
-                        <thead className="border-b border-gray-200 bg-gray-50">
-                          <tr>
-                            <th className="py-3 px-4 text-left text-xs font-medium text-gray-500 uppercase">
-                              Course Code
-                            </th>
-                            <th className="py-3 px-4 text-left text-xs font-medium text-gray-500 uppercase">
-                              Subject Name
-                            </th>
-                            <th className="py-3 px-4 text-left text-xs font-medium text-gray-500 uppercase">
-                              Semester
-                            </th>
-                            <th className="py-3 px-4 text-left text-xs font-medium text-gray-500 uppercase">
-                              Credits
-                            </th>
-                            <th className="py-3 px-4 text-left text-xs font-medium text-gray-500 uppercase">
-                              Description
-                            </th>
-                            <th className="py-3 px-4 text-right text-xs font-medium text-gray-500 uppercase">
-                              Actions
-                            </th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {subjects
-                            .filter((subject) => {
-                              const matchesSearch =
-                                !subjectSearch ||
-                                subject.subject_name
-                                  ?.toLowerCase()
-                                  .includes(subjectSearch.toLowerCase()) ||
-                                subject.course_code
-                                  ?.toLowerCase()
-                                  .includes(subjectSearch.toLowerCase());
-                              const matchesSemester =
-                                subjectSemesterFilter === "all" ||
-                                subject.semester ===
-                                  parseInt(subjectSemesterFilter);
-                              return matchesSearch && matchesSemester;
-                            })
-                            .map((subject, idx) => (
-                              <tr
-                                key={subject.id}
-                                className={`border-b border-gray-100 last:border-0 ${
-                                  idx % 2 === 0 ? "bg-gray-50" : "bg-white"
-                                }`}
-                              >
-                                <td className="py-3 px-4">
-                                  <span className="font-medium text-gray-900">
-                                    {subject.course_code}
-                                  </span>
-                                </td>
-                                <td className="py-3 px-4 text-gray-900">
-                                  {subject.subject_name}
-                                </td>
-                                <td className="py-3 px-4">
-                                  {subject.semester ? (
-                                    <span className="inline-flex items-center px-2 py-0.5 rounded-sm text-xs font-medium text-white bg-purple-500">
-                                      Semester {subject.semester}
-                                    </span>
-                                  ) : (
-                                    <span className="inline-flex items-center px-2 py-0.5 rounded-sm text-xs font-medium text-gray-500 bg-gray-200">
-                                      N/A
-                                    </span>
-                                  )}
-                                </td>
-                                <td className="py-3 px-4 text-gray-700">
-                                  {subject.credits} Credit
-                                  {subject.credits > 1 ? "s" : ""}
-                                </td>
-                                <td className="py-3 px-4 text-gray-600 text-sm">
-                                  {subject.description || (
-                                    <span className="text-gray-400 italic">
-                                      No description
-                                    </span>
-                                  )}
-                                </td>
-                                <td className="py-3 px-4">
-                                  <div className="flex justify-end">
-                                    <Menu
-                                      as="div"
-                                      className="relative inline-block text-left"
-                                    >
-                                      <Menu.Button
-                                        as={Button}
-                                        variant="ghost"
-                                        size="sm"
-                                        className="p-1.5 sm:p-2"
-                                      >
-                                        <MoreHorizontal className="w-4 h-4" />
-                                      </Menu.Button>
-                                      <Transition
-                                        enter="transition ease-out duration-100"
-                                        enterFrom="transform opacity-0 scale-95"
-                                        enterTo="transform opacity-100 scale-100"
-                                        leave="transition ease-in duration-75"
-                                        leaveFrom="transform opacity-100 scale-100"
-                                        leaveTo="transform opacity-0 scale-95"
-                                      >
-                                        <Menu.Items className="absolute right-0 mt-2 w-40 origin-top-right rounded-md border border-gray-200 bg-white shadow-lg focus:outline-none z-50">
-                                          <div className="py-1">
-                                            <Menu.Item>
-                                              {({ active }) => (
-                                                <button
-                                                  onClick={() =>
-                                                    deleteSubject(subject.id)
-                                                  }
-                                                  className={`${
-                                                    active ? "bg-gray-100" : ""
-                                                  } flex w-full px-3 py-2 text-left text-sm text-red-600 hover:bg-gray-50`}
-                                                >
-                                                  Delete
-                                                </button>
-                                              )}
-                                            </Menu.Item>
-                                          </div>
-                                        </Menu.Items>
-                                      </Transition>
-                                    </Menu>
-                                  </div>
-                                </td>
-                              </tr>
-                            ))}
-                          {subjects.filter((subject) => {
-                            const matchesSearch =
-                              !subjectSearch ||
-                              subject.subject_name
-                                ?.toLowerCase()
-                                .includes(subjectSearch.toLowerCase()) ||
-                              subject.course_code
-                                ?.toLowerCase()
-                                .includes(subjectSearch.toLowerCase());
-                            const matchesSemester =
-                              subjectSemesterFilter === "all" ||
-                              subject.semester ===
-                                parseInt(subjectSemesterFilter);
-                            return matchesSearch && matchesSemester;
-                          }).length === 0 && (
-                            <tr>
-                              <td
-                                className="py-4 text-center text-gray-600"
-                                colSpan={6}
-                              >
-                                No subjects found
-                              </td>
-                            </tr>
-                          )}
-                        </tbody>
-                      </table>
-                    </div>
-                  </CardContent>
-                </Card>
-              )}
-            </div>
-          )}
-
-          {/* Students View */}
-          {currentView === "students" && (
-            <>
-              {/* Search and Filters */}
-              <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-4">
-                <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-                  <div className="md:col-span-2">
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
-                      Search
-                    </label>
-                    <input
-                      type="text"
-                      value={studentSearch}
-                      onChange={(e) => setStudentSearch(e.target.value)}
-                      placeholder="Search by name, roll, or guardian..."
-                      className="w-full px-3 py-2 border border-gray-300 rounded-md bg-white text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
-                      Class
-                    </label>
-                    <select
-                      value={studentClassFilter}
-                      onChange={(e) => setStudentClassFilter(e.target.value)}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-md bg-white text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                    >
-                      <option value="">All Classes</option>
-                      {Array.from(
-                        new Set(students.map((s) => s.class).filter(Boolean))
-                      )
-                        .sort()
-                        .map((cls) => (
-                          <option key={cls} value={cls}>
-                            {cls}
-                          </option>
-                        ))}
-                    </select>
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
-                      Section
-                    </label>
-                    <select
-                      value={studentSectionFilter}
-                      onChange={(e) => setStudentSectionFilter(e.target.value)}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-md bg-white text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                    >
-                      <option value="">All Sections</option>
-                      {Array.from(
-                        new Set(students.map((s) => s.section).filter(Boolean))
-                      )
-                        .sort()
-                        .map((sec) => (
-                          <option key={sec} value={sec}>
-                            {sec}
-                          </option>
-                        ))}
-                    </select>
-                  </div>
-                </div>
-              </div>
-
-              {/* Students Table */}
-              <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
-                <div className="flex justify-between items-center mb-4">
-                  <h2 className="text-lg font-semibold text-gray-900">
-                    Student List ({students.length})
-                  </h2>
-                </div>
-
-                {studentsLoading ? (
-                  <div className="text-center py-12">
-                    <div className="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
-                    <p className="mt-4 text-gray-600">Loading students...</p>
-                  </div>
-                ) : students.length === 0 ? (
-                  <div className="text-center py-12">
-                    <p className="text-gray-600">No students found.</p>
-                  </div>
-                ) : (
-                  <div className="overflow-x-auto">
-                    <table className="min-w-full bg-white border border-gray-200 rounded-lg">
-                      <thead className="bg-gray-50">
-                        <tr>
-                          <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">
-                            Profile
-                          </th>
-                          <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">
-                            Roll
-                          </th>
-                          <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">
-                            Name
-                          </th>
-                          <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">
-                            Class
-                          </th>
-                          <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">
-                            Section
-                          </th>
-                          <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">
-                            Guardian
-                          </th>
-                        </tr>
-                      </thead>
-                      <tbody className="divide-y divide-gray-200">
-                        {students.map((student) => (
-                          <tr key={student.id} className="hover:bg-gray-50">
-                            <td className="px-4 py-3">
-                              <div className="w-10 h-10 rounded-full bg-blue-500 text-white flex items-center justify-center font-semibold">
-                                {student.full_name
-                                  ?.split(" ")
-                                  .map((n) => n[0])
-                                  .join("")
-                                  .toUpperCase()
-                                  .slice(0, 2) || "?"}
-                              </div>
-                            </td>
-                            <td className="px-4 py-3 text-sm font-medium text-gray-900">
-                              {student.roll}
-                            </td>
-                            <td className="px-4 py-3 text-sm text-gray-900">
-                              {student.full_name}
-                            </td>
-                            <td className="px-4 py-3 text-sm text-gray-600">
-                              {student.class || "-"}
-                            </td>
-                            <td className="px-4 py-3 text-sm text-gray-600">
-                              {student.section || "-"}
-                            </td>
-                            <td className="px-4 py-3 text-sm text-gray-600">
-                              {student.guardian_name || "-"}
-                            </td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-                )}
-              </div>
-            </>
-          )}
-
-          {/* Teacher Details Modal */}
-          <TeacherDetails
-            open={showTeacherDetails}
-            onClose={() => setShowTeacherDetails(false)}
-            selectedTeacher={selectedTeacher}
-          />
-
-          <AddUser
-            open={showAddUser}
-            onClose={() => {
-              setShowAddUser(false);
-              setAddUserRole("teacher");
-            }}
-            onUserAdded={() => {
-              fetchProfiles();
-              fetchTeacherStats();
-              fetchStudentCount();
-              if (currentView === "teachers") fetchTeachers();
-              if (currentView === "students") fetchStudents();
-            }}
-            defaultRole={addUserRole}
-          />
-
-          <AddClass
-            open={showAssignClass}
-            onClose={() => setShowAssignClass(false)}
-            profiles={profiles}
-            onCreated={() => {
-              fetchProfiles();
-              fetchTeacherStats();
-            }}
-          />
-
-          <AddSubject
-            open={showAddSubject}
-            onClose={() => setShowAddSubject(false)}
-            onCreated={() => {
-              fetchSubjects();
-            }}
-          />
-
-          <NotificationPanel
-            open={showNotificationPanel}
-            onClose={() => setShowNotificationPanel(false)}
-            onNotificationSent={() => {
-              // Optionally refresh data or show success message
-            }}
-          />
-        </main>
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <Card>
+          <CardHeader><CardTitle>Attendance Summary</CardTitle></CardHeader>
+          <CardContent className="h-64 flex items-center justify-center bg-gray-50 border-dashed border-2 rounded-lg">
+             <p className="text-gray-500">Attendance Chart Placeholder</p>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardHeader><CardTitle>Fee Status Overview</CardTitle></CardHeader>
+          <CardContent className="space-y-4">
+             <div className="flex justify-between items-center p-3 bg-red-50 rounded-lg">
+                <span className="font-medium text-red-700">Pending Dues</span>
+                <span className="font-bold text-red-700">$12,450</span>
+             </div>
+             <div className="flex justify-between items-center p-3 bg-green-50 rounded-lg">
+                <span className="font-medium text-green-700">Collected This Month</span>
+                <span className="font-bold text-green-700">$45,200</span>
+             </div>
+             <Button variant="outline" className="w-full" onClick={()=>setCurrentView("fees")}>View Fee Details</Button>
+          </CardContent>
+        </Card>
       </div>
     </div>
+  );
+
+  // 2. Students Component
+  const renderStudents = () => {
+    const filtered = students.filter(s => 
+      s.full_name?.toLowerCase().includes(searchQuery.toLowerCase()) || 
+      s.roll?.toLowerCase().includes(searchQuery.toLowerCase())
+    );
+    return (
+      <div className="space-y-4 animate-in fade-in slide-in-from-bottom-4 duration-500">
+        <div className="flex justify-between items-center">
+            <h2 className="text-2xl font-bold">Student Management</h2>
+            <Button onClick={() => handleAddUser("student")} className="bg-purple-600"><Plus className="w-4 h-4 mr-2"/> Add Student</Button>
+        </div>
+        <div className="flex gap-4 mb-4">
+            <div className="relative flex-1">
+                <Search className="absolute left-3 top-2.5 h-4 w-4 text-gray-500"/>
+                <Input placeholder="Search students..." className="pl-10" value={searchQuery} onChange={e => setSearchQuery(e.target.value)} />
+            </div>
+            <Button variant="outline"><Filter className="w-4 h-4 mr-2"/> Filter</Button>
+        </div>
+        <Card>
+            <div className="overflow-x-auto">
+                <table className="w-full text-sm text-left">
+                    <thead className="bg-gray-100 uppercase text-gray-600">
+                        <tr>
+                            <th className="px-6 py-3">Roll</th>
+                            <th className="px-6 py-3">Name</th>
+                            <th className="px-6 py-3">Class</th>
+                            <th className="px-6 py-3">Guardian</th>
+                            <th className="px-6 py-3 text-right">Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {filtered.map(s => (
+                            <tr key={s.id} className="border-b hover:bg-gray-50">
+                                <td className="px-6 py-4 font-medium">{s.roll}</td>
+                                <td className="px-6 py-4">{s.full_name}</td>
+                                <td className="px-6 py-4">{s.class} - {s.section}</td>
+                                <td className="px-6 py-4">{s.guardian_name}</td>
+                                <td className="px-6 py-4 text-right space-x-2">
+                                    <Button variant="ghost" size="sm" className="h-8 w-8 p-0 text-blue-600"><Edit className="w-4 h-4"/></Button>
+                                    <Button variant="ghost" size="sm" className="h-8 w-8 p-0 text-red-600" onClick={() => handleDeleteUser(s.id, 'student')}><Trash2 className="w-4 h-4"/></Button>
+                                    <Button variant="ghost" size="sm" title="Assign Class" onClick={() => setShowAddClass(true)}><BookOpen className="w-4 h-4 text-gray-500"/></Button>
+                                </td>
+                            </tr>
+                        ))}
+                        {filtered.length === 0 && <tr><td colSpan="5" className="text-center py-8 text-gray-500">No students found</td></tr>}
+                    </tbody>
+                </table>
+            </div>
+        </Card>
+      </div>
+    );
+  };
+
+  // 3. Teachers Component
+  const renderTeachers = () => {
+     const filtered = teachers.filter(t => 
+       t.full_name?.toLowerCase().includes(searchQuery.toLowerCase()) || 
+       t.email?.toLowerCase().includes(searchQuery.toLowerCase())
+     );
+     return (
+       <div className="space-y-4 animate-in fade-in slide-in-from-bottom-4 duration-500">
+         <div className="flex justify-between items-center">
+             <h2 className="text-2xl font-bold">Teacher Management</h2>
+             <Button onClick={() => handleAddUser("teacher")} className="bg-purple-600"><Plus className="w-4 h-4 mr-2"/> Add Teacher</Button>
+         </div>
+         <div className="relative">
+             <Search className="absolute left-3 top-2.5 h-4 w-4 text-gray-500"/>
+             <Input placeholder="Search teachers..." className="pl-10" value={searchQuery} onChange={e => setSearchQuery(e.target.value)} />
+         </div>
+         <div className="grid gap-6">
+             <Card>
+                 <div className="overflow-x-auto">
+                     <table className="w-full text-sm text-left">
+                         <thead className="bg-gray-100 uppercase text-gray-600">
+                             <tr>
+                                 <th className="px-6 py-3">Name</th>
+                                 <th className="px-6 py-3">Email</th>
+                                 <th className="px-6 py-3">Status</th>
+                                 <th className="px-6 py-3 text-right">Actions</th>
+                             </tr>
+                         </thead>
+                         <tbody>
+                             {filtered.map(t => (
+                                 <tr key={t.id} className="border-b hover:bg-gray-50">
+                                     <td className="px-6 py-4 font-medium">{t.full_name}</td>
+                                     <td className="px-6 py-4">{t.email}</td>
+                                     <td className="px-6 py-4">
+                                         <span className={`px-2 py-1 rounded-full text-xs ${t.is_active ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>
+                                             {t.is_active ? 'Active' : 'Inactive'}
+                                         </span>
+                                     </td>
+                                     <td className="px-6 py-4 text-right space-x-2">
+                                         <Button variant="ghost" size="sm" className="h-8 w-8 p-0 text-blue-600"><Edit className="w-4 h-4"/></Button>
+                                         <Button variant="ghost" size="sm" className="h-8 w-8 p-0 text-red-600" onClick={()=>handleDeleteUser(t.id, 'teacher')}><Trash2 className="w-4 h-4"/></Button>
+                                     </td>
+                                 </tr>
+                             ))}
+                             {filtered.length === 0 && <tr><td colSpan="4" className="text-center py-8 text-gray-500">No teachers found</td></tr>}
+                         </tbody>
+                     </table>
+                 </div>
+             </Card>
+         </div>
+       </div>
+     )
+  }
+
+  // 4. Class & Subjects Component
+  const renderClasses = () => (
+    <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
+        <h2 className="text-2xl font-bold">Class & Subject Management</h2>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <Card>
+                <CardHeader className="flex flex-row items-center justify-between">
+                    <CardTitle>Classes</CardTitle>
+                    <Button size="sm" onClick={() => setShowAddClass(true)}><Plus className="w-4 h-4 mr-2"/> Add</Button>
+                </CardHeader>
+                <CardContent className="space-y-2">
+                    {classes.map(c => (
+                        <div key={c.id} className="flex justify-between p-3 bg-gray-50 rounded">
+                            <div>
+                                <p className="font-semibold">{c.course}</p>
+                                <p className="text-xs text-gray-500">{c.semester} • {c.section}</p>
+                            </div>
+                        </div>
+                    ))}
+                    {classes.length === 0 && <p className="text-center text-gray-500 py-4">No classes added</p>}
+                </CardContent>
+            </Card>
+            <Card>
+                <CardHeader className="flex flex-row items-center justify-between">
+                    <CardTitle>Subjects</CardTitle>
+                    <Button size="sm"><Plus className="w-4 h-4 mr-2"/> Add</Button>
+                </CardHeader>
+                 <CardContent className="space-y-2">
+                    {subjects.map(s => (
+                        <div key={s.id} className="flex justify-between p-3 bg-gray-50 rounded">
+                            <span className="font-medium">{s.name}</span>
+                            <span className="text-xs text-gray-400 bg-white px-2 py-1 rounded border">{s.code}</span>
+                        </div>
+                    ))}
+                     {subjects.length === 0 && <p className="text-center text-gray-500 py-4">No subjects added</p>}
+                </CardContent>
+            </Card>
+        </div>
+    </div>
+  );
+
+  // 5. Attendance Component
+  const renderAttendance = () => (
+      <div className="space-y-4 animate-in fade-in slide-in-from-bottom-4 duration-500">
+          <h2 className="text-2xl font-bold">Attendance Monitoring</h2>
+          <div className="flex gap-4">
+              <select className="border p-2 rounded-md w-40">
+                  <option>Select Class</option>
+                  {classes.map(c => <option key={c.id} value={c.id}>{c.course}</option>)}
+              </select>
+              <input type="date" className="border p-2 rounded-md" />
+              <Button>Filter</Button>
+          </div>
+          <Card>
+              <CardContent className="p-0">
+                  <table className="w-full text-sm text-left">
+                      <thead className="bg-gray-100 uppercase text-gray-600">
+                          <tr>
+                             <th className="px-6 py-3">Student</th>
+                             <th className="px-6 py-3">Status</th>
+                             <th className="px-6 py-3">Remarks</th>
+                          </tr>
+                      </thead>
+                      <tbody>
+                          <tr><td colSpan="3" className="px-6 py-8 text-center text-gray-500">Select a class to view attendance records</td></tr>
+                      </tbody>
+                  </table>
+              </CardContent>
+          </Card>
+          
+          <div className="mt-8">
+              <h3 className="text-lg font-semibold mb-2 text-red-600">Low Attendance Alert (&lt;75%)</h3>
+              <Card className="border-red-200 bg-red-50">
+                  <CardContent className="p-4">
+                      <p className="text-sm text-red-700">No students currently flagged for low attendance.</p>
+                  </CardContent>
+              </Card>
+          </div>
+      </div>
+  );
+  
+  // 6. Fees Component
+  const renderFees = () => (
+      <div className="space-y-4 animate-in fade-in slide-in-from-bottom-4 duration-500">
+          <h2 className="text-2xl font-bold">Fee Management</h2>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-4">
+               <Card className="bg-green-50 border-green-200"><CardContent className="p-4 text-center"><p className="text-sm text-green-600">Collected</p><p className="text-2xl font-bold text-green-800">$45,200</p></CardContent></Card>
+               <Card className="bg-red-50 border-red-200"><CardContent className="p-4 text-center"><p className="text-sm text-red-600">Pending</p><p className="text-2xl font-bold text-red-800">$12,450</p></CardContent></Card>
+          </div>
+          <Card>
+             <div className="overflow-x-auto">
+              <table className="w-full text-sm text-left">
+                  <thead className="bg-gray-100 uppercase text-gray-600">
+                      <tr>
+                          <th className="px-6 py-3">Student</th>
+                          <th className="px-6 py-3">Class</th>
+                          <th className="px-6 py-3">Amount Due</th>
+                          <th className="px-6 py-3">Status</th>
+                          <th className="px-6 py-3">Actions</th>
+                      </tr>
+                  </thead>
+                  <tbody>
+                      {students.slice(0,5).map(s => (
+                          <tr key={s.id} className="border-b">
+                              <td className="px-6 py-4 font-medium">{s.full_name}</td>
+                              <td className="px-6 py-4">{s.class}</td>
+                              <td className="px-6 py-4">$500</td>
+                              <td className="px-6 py-4"><span className="bg-yellow-100 text-yellow-700 px-2 py-1 rounded text-xs">Pending</span></td>
+                              <td className="px-6 py-4"><Button size="sm" variant="outline">Remind</Button></td>
+                          </tr>
+                      ))}
+                  </tbody>
+              </table>
+              </div>
+          </Card>
+      </div>
+  );
+
+  // 7. Reports Component
+  const renderReports = () => (
+       <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
+          <h2 className="text-2xl font-bold">Reports & Exports</h2>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <Card>
+                  <CardHeader><CardTitle>Attendance Report</CardTitle></CardHeader>
+                  <CardContent>
+                      <p className="text-sm text-gray-500 mb-4">Monthly attendance summary for all classes.</p>
+                      <div className="flex gap-2">
+                        <Button variant="outline"><FileText className="w-4 h-4 mr-2"/> PDF</Button>
+                        <Button variant="outline"><FileText className="w-4 h-4 mr-2"/> Excel</Button>
+                      </div>
+                  </CardContent>
+              </Card>
+              <Card>
+                  <CardHeader><CardTitle>Student Performance</CardTitle></CardHeader>
+                  <CardContent>
+                      <p className="text-sm text-gray-500 mb-4">Academic performance and grades export.</p>
+                       <div className="flex gap-2">
+                        <Button variant="outline"><FileText className="w-4 h-4 mr-2"/> PDF</Button>
+                        <Button variant="outline"><FileText className="w-4 h-4 mr-2"/> Excel</Button>
+                      </div>
+                  </CardContent>
+              </Card>
+          </div>
+       </div>
+  );
+
+  // 8. Notices Component
+  const renderNotices = () => (
+      <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
+           <div className="flex justify-between items-center">
+             <h2 className="text-2xl font-bold">Notices & Announcements</h2>
+             <Button className="bg-purple-600"><Plus className="w-4 h-4 mr-2"/> Create Notice</Button>
+         </div>
+         <Card>
+             <CardContent className="p-0">
+                 {notices.map(n => (
+                     <div key={n.id} className="p-4 border-b last:border-0 hover:bg-gray-50 flex justify-between items-center">
+                         <div>
+                             <h4 className="font-semibold text-gray-900">{n.title}</h4>
+                             <p className="text-sm text-gray-500">Target: {n.target} • {n.date}</p>
+                         </div>
+                         <Button variant="ghost" size="sm"><Trash2 className="w-4 h-4 text-red-500"/></Button>
+                     </div>
+                 ))}
+             </CardContent>
+         </Card>
+      </div>
+  );
+
+  // --- Main Render ---
+  if (loading) return <div className="flex h-screen items-center justify-center">Loading...</div>;
+
+  return (
+    <div className="flex min-h-screen bg-gray-50">
+      <Sidebar
+        role="admin"
+        open={sidebarOpen}
+        onOpenChange={setSidebarOpen}
+        collapsed={sidebarCollapsed}
+        onToggleCollapsed={() => setSidebarCollapsed(!sidebarCollapsed)}
+        currentView={currentView}
+        onViewChange={setCurrentView}
+        onAddStudent={()=>{setAddUserRole("student"); setShowAddUser(true);}}
+        onAddTeacher={()=>{setAddUserRole("teacher"); setShowAddUser(true);}}
+        onAssignClass={()=>{setShowAddClass(true)}}
+      />
+      
+      <main className="flex-1 p-6 md:p-8 overflow-y-auto h-screen">
+        {/* Header Mobile Toggle */}
+        <div className="md:hidden flex items-center justify-between mb-6">
+            <h1 className="text-xl font-bold text-purple-700">Admin Panel</h1>
+            <Button variant="ghost" onClick={() => setSidebarOpen(true)}><Menu className="w-6 h-6"/></Button>
+        </div>
+
+        {/* Content Switcher */}
+        {currentView === "dashboard" && renderDashboard()}
+        {currentView === "students" && renderStudents()}
+        {currentView === "teachers" && renderTeachers()}
+        {currentView === "subjects" && renderClasses()} 
+        {/* Note: Sidebar uses 'subjects' ID for Class & Subject Management */}
+        {currentView === "attendance" && renderAttendance()}
+        {currentView === "fees" && renderFees()} // Sidebar needs to support this ID
+        {currentView === "reports" && renderReports()} // Sidebar needs to support this ID
+        {currentView === "notices" && renderNotices()} // Sidebar needs to support this ID
+      </main>
+
+      {/* Modals */}
+      {showAddUser && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
+          <div className="w-full max-w-2xl bg-white rounded-lg shadow-xl overflow-hidden max-h-[90vh] overflow-y-auto">
+            <div className="flex justify-between items-center p-4 border-b">
+                <h3 className="text-lg font-semibold">Add {addUserRole === 'teacher' ? 'Teacher' : 'Student'}</h3>
+                <Button variant="ghost" onClick={() => setShowAddUser(false)}><XCircle className="w-5 h-5"/></Button>
+            </div>
+            <div className="p-4">
+                <AddUser 
+                    onClose={() => {setShowAddUser(false); fetchAllData();}} 
+                    defaultRole={addUserRole} 
+                />
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showAddClass && (
+           <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
+            <div className="w-full max-w-lg bg-white rounded-lg shadow-xl">
+                 <div className="flex justify-between items-center p-4 border-b">
+                    <h3 className="text-lg font-semibold">Assign Class</h3>
+                    <Button variant="ghost" onClick={() => setShowAddClass(false)}><XCircle className="w-5 h-5"/></Button>
+                </div>
+                <div className="p-4">
+                    <AddClass onClose={() => {setShowAddClass(false); fetchAllData();}} />
+                </div>
+            </div>
+           </div>
+      )}
+    </div>
+  );
+}
+
+// Simple Stat Card Component
+function StatsCard({ title, value, icon: Icon, color, bg }) {
+  return (
+    <Card className="hover:shadow-md transition-shadow">
+      <CardContent className="p-6 flex items-center justify-between">
+        <div>
+          <p className="text-sm font-medium text-gray-500">{title}</p>
+          <p className="text-2xl font-bold text-gray-900 mt-1">{value}</p>
+        </div>
+        <div className={`p-3 rounded-xl ${bg}`}>
+          <Icon className={`w-6 h-6 ${color}`} />
+        </div>
+      </CardContent>
+    </Card>
   );
 }

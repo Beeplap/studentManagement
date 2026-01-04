@@ -20,6 +20,9 @@ import {
   Lock,
   User,
   HelpCircle,
+  DollarSign,
+  FileText,
+  Bell,
 } from "lucide-react";
 import { supabase } from "@/lib/supabaseClient";
 import ConfirmDialog from "./ConfirmDialog";
@@ -77,6 +80,10 @@ export default function Sidebar({
         { id: "teachers", label: "Teacher Management", icon: UserCheck },
         { id: "students", label: "Student Management", icon: School },
         { id: "subjects", label: "Class & Subject Management", icon: BookOpen },
+        { id: "attendance", label: "Attendance", icon: Calendar },
+        { id: "fees", label: "Fee Management", icon: DollarSign },
+        { id: "reports", label: "Reports", icon: FileText },
+        { id: "notices", label: "Notices", icon: Bell },
       ],
       hasStatistics: true,
       actions: [
