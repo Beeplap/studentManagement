@@ -85,27 +85,9 @@ export default function Sidebar({
         { id: "reports", label: "Reports", icon: FileText },
         { id: "notices", label: "Notices", icon: Bell },
       ],
-      hasStatistics: true,
-      actions: [
-        {
-          id: "add-teacher",
-          label: "Add Teacher",
-          icon: UserPlus,
-          onClick: onAddTeacher,
-        },
-        {
-          id: "add-student",
-          label: "Add Student",
-          icon: GraduationCap,
-          onClick: onAddStudent,
-        },
-        {
-          id: "assign-class",
-          label: "Assign Class",
-          icon: BookOpen,
-          onClick: onAssignClass,
-        },
-      ],
+      
+      hasStatistics: false,
+      actions: [],
     },
     teacher: {
       title: "Teacher",
