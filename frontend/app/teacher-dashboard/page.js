@@ -26,13 +26,12 @@ import {
 import Sidebar from "@/components/ui/Sidebar";
 
 // Imported Components
-import AttendancePage from "../attendance/page"; // Keeping as is, though might have layout duplication
-// import StudentDirectoryPage from "../student-directory/page"; // Replaced by Performance/Marks mostly, but leaving if needed
-import AssignmentsTeacherView from "@/components/dashboard/AssignmentsTeacherView";
 import MarksSection from "@/components/dashboard/MarksSection";
 import StudentPerformance from "@/components/dashboard/StudentPerformance";
 import NoticesBoard from "@/components/dashboard/NoticesBoard";
 import TeacherProfile from "@/components/dashboard/TeacherProfile";
+import AttendanceManager from "@/components/dashboard/AttendanceManager";
+import AssignmentsManager from "@/components/dashboard/AssignmentsManager";
 
 export default function TeacherDashboardPage() {
   const router = useRouter();
@@ -329,11 +328,11 @@ export default function TeacherDashboardPage() {
               </>
             )}
 
-            {currentView === "attendance" && <AttendancePage />}
+            {currentView === "attendance" && <AttendanceManager teacherId={userId} />}
             
             {currentView === "marks" && <MarksSection teacherId={userId} />}
 
-            {currentView === "assignments" && <AssignmentsTeacherView teacherId={userId} />}
+            {currentView === "assignments" && <AssignmentsManager teacherId={userId} />}
 
             {currentView === "performance" && <StudentPerformance teacherId={userId} />}
 
