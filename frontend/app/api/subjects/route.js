@@ -50,18 +50,13 @@ export async function POST(request) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    // Insert into courses table (matching user's database schema)
-    const { data: courseData, error } = await supabase
-      .from("courses")
+    // Insert into subjects table
+    const { data: subjectDataResult, error } = await supabase
+      .from("subjects")
       .insert([
         {
-          course_code,
-          course_title: subject_name, // Map subject_name to course_title
-          credit_hours: credits || 3, // Map credits to credit_hours
-          description: description || null,
-          theory_hours: 0,
-          practical_hours: 0,
-          course_type: "Core", // Default to Core, can be updated later
+          code: course_code,
+          name: subject_name,
         },
       ])
       .select()
@@ -112,36 +107,32 @@ export async function GET(request) {
     const { searchParams } = new URL(request.url);
     const semester = searchParams.get("semester");
 
-    // Query from courses table (matching user's database schema)
+    // Query from subjects table
     let query = supabase
-      .from("courses")
+      .from("subjects")
       .select("*")
-      .order("course_code", { ascending: true });
+      .order("code", { ascending: true });
 
-    const { data: courses, error } = await query;
+    const { data: subjectsData, error } = await query;
     if (error) throw error;
 
-    // Map courses table structure to subjects format expected by frontend
-    const subjects = (courses || []).map((course) => ({
-      id: course.id,
-      course_code: course.course_code,
-      subject_name: course.course_title, // Map course_title to subject_name
-      credits: course.credit_hours, // Map credit_hours to credits
-      description: course.description,
-      semester: course.semester || null, // Handle if semester field exists, otherwise null
-      course_type: course.course_type,
-      theory_hours: course.theory_hours,
-      practical_hours: course.practical_hours,
-      created_at: course.created_at,
+    // Map subjects table structure to frontend format
+    const subjects = (subjectsData || []).map((subject) => ({
+      id: subject.id,
+      course_code: subject.code,
+      subject_name: subject.name, 
+      credits: 3, // Default or add column if needed
+      description: "", // Add if needed
+      semester: null, // Subjects are general, Classes are semester specific
+      course_type: "Core",
+      created_at: subject.created_at,
     }));
 
-    // Filter by semester if provided (only if semester field exists in courses)
+    // Filter by semester if provided (Note: Subjects table might not have semester if it's a general pool)
+    // If strict semester filtering is needed for SUBJECTS, we need a column. 
+    // For now returning all or filtering in memory if column existed.
     let filteredSubjects = subjects;
-    if (semester) {
-      filteredSubjects = subjects.filter(
-        (s) => s.semester === parseInt(semester)
-      );
-    }
+    // if (semester) { ... }
 
     return NextResponse.json({ subjects: filteredSubjects });
   } catch (error) {
@@ -184,8 +175,8 @@ export async function DELETE(request) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    // Delete from courses table
-    const { error } = await supabase.from("courses").delete().eq("id", id);
+    // Delete from subjects table
+    const { error } = await supabase.from("subjects").delete().eq("id", id);
 
     if (error) throw error;
 
