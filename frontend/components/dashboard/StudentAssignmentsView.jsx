@@ -1,0 +1,197 @@
+"use client";
+import React, { useState, useEffect } from "react";
+import { supabase } from "@/lib/supabaseClient";
+import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import {
+  BookOpen,
+  CheckCircle,
+  Clock,
+  FileText,
+  Upload,
+  AlertCircle
+} from "lucide-react";
+
+export default function StudentAssignmentsView({ studentId, studentClass }) {
+  const [loading, setLoading] = useState(true);
+  const [assignments, setAssignments] = useState([]);
+  const [submittingId, setSubmittingId] = useState(null);
+  const [submissionText, setSubmissionText] = useState("");
+
+  useEffect(() => {
+    if (studentId && studentClass) fetchAssignments();
+  }, [studentId, studentClass]);
+
+  const fetchAssignments = async () => {
+    setLoading(true);
+    try {
+      // 1. Fetch assignments for student's class
+      // We need to link classes table ideally, but based on simplified schema:
+      // Assuming we filter assignments by checking if the assignment's class matches student's class
+      // This requires a join or two-step fetch.
+      // Let's assume studentClass is the ID or we search assignments on tables.
+      // Better: fetch assignments linked to classes that match the student's 'class' string (grade/course)
+      
+      const { data: matchedClasses } = await supabase
+        .from('classes')
+        .select('id')
+        .or(`grade.eq.${studentClass},course.eq.${studentClass},subject.eq.${studentClass}`);
+      
+      const classIds = matchedClasses?.map(c => c.id) || [];
+      
+      if (classIds.length === 0) {
+          setAssignments([]);
+          setLoading(false);
+          return;
+      }
+
+      const { data: assignmentData, error } = await supabase
+        .from("assignments")
+        .select("*, classes(subject)")
+        .in("class_id", classIds)
+        .order("created_at", { ascending: false });
+
+      if (error) throw error;
+
+      // 2. Fetch my submissions
+      const { data: mySubmissions } = await supabase
+        .from("submissions")
+        .select("*")
+        .eq("student_id", studentId);
+
+      // 3. Merge
+      const merged = assignmentData.map((assign) => {
+        const sub = mySubmissions?.find((s) => s.assignment_id === assign.id);
+        return { ...assign, submission: sub || null };
+      });
+
+      setAssignments(merged);
+    } catch (err) {
+      console.error("Error fetching assignments:", err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleSubmit = async (assignmentId) => {
+    if (!submissionText.trim()) return;
+    
+    try {
+        const { error } = await supabase.from("submissions").insert({
+            assignment_id: assignmentId,
+            student_id: studentId,
+            content: submissionText,
+            status: "submitted"
+        });
+
+        if (error) throw error;
+        
+        // Refresh local state
+        setAssignments(prev => prev.map(a => {
+            if (a.id === assignmentId) {
+                return { ...a, submission: { content: submissionText, status: "submitted", submitted_at: new Date() } };
+            }
+            return a;
+        }));
+        setSubmissionText("");
+        setSubmittingId(null);
+        alert("Assignment submitted successfully!");
+
+    } catch (err) {
+        console.error("Submission error:", err);
+        alert("Failed to submit.");
+    }
+  };
+
+  return (
+    <div className="space-y-6">
+      <div className="grid grid-cols-1 gap-6">
+        {assignments.map((assignment) => {
+            const isSubmitted = !!assignment.submission;
+            const isGraded = assignment.submission?.status === 'graded';
+            const isExpanded = submittingId === assignment.id;
+
+            return (
+                <Card key={assignment.id} className="overflow-hidden">
+                    <CardHeader className="bg-gray-50 pb-3">
+                        <div className="flex justify-between items-start">
+                            <div>
+                                <span className="text-xs font-bold text-blue-600 bg-blue-100 px-2 py-1 rounded uppercase tracking-wide">
+                                    {assignment.classes?.subject || "Assignment"}
+                                </span>
+                                <CardTitle className="text-xl mt-2">{assignment.title}</CardTitle>
+                            </div>
+                            <div className="flex flex-col items-end gap-2">
+                                {isGraded ? (
+                                    <span className="flex items-center gap-1 text-sm font-bold text-green-600 bg-green-100 px-3 py-1 rounded-full">
+                                        <CheckCircle className="w-4 h-4" /> Graded: {assignment.submission.grade}
+                                    </span>
+                                ) : isSubmitted ? (
+                                    <span className="flex items-center gap-1 text-sm font-bold text-blue-600 bg-blue-50 px-3 py-1 rounded-full">
+                                        <CheckCircle className="w-4 h-4" /> Submitted
+                                    </span>
+                                ) : (
+                                    <span className="flex items-center gap-1 text-sm font-bold text-orange-600 bg-orange-50 px-3 py-1 rounded-full">
+                                        <Clock className="w-4 h-4" /> Pending
+                                    </span>
+                                )}
+                                <span className="text-xs text-gray-500">
+                                    Due: {new Date(assignment.due_date).toLocaleDateString()}
+                                </span>
+                            </div>
+                        </div>
+                    </CardHeader>
+                    <CardContent className="pt-4 space-y-4">
+                        <p className="text-gray-700 whitespace-pre-wrap">{assignment.description}</p>
+                        
+                        {assignment.submission?.feedback && (
+                            <div className="bg-green-50 p-3 rounded border border-green-100 text-sm">
+                                <p className="font-bold text-green-800">Teacher's Feedback:</p>
+                                <p className="text-green-700">{assignment.submission.feedback}</p>
+                            </div>
+                        )}
+
+                        {/* Submission Area */}
+                        {!isSubmitted ? (
+                            <div className="mt-4 pt-4 border-t">
+                                {!isExpanded ? (
+                                    <Button onClick={() => setSubmittingId(assignment.id)} variant="outline">
+                                        <Upload className="w-4 h-4 mr-2" /> Submit Assignment
+                                    </Button>
+                                ) : (
+                                    <div className="space-y-3">
+                                        <textarea 
+                                            className="w-full p-3 border rounded-md text-sm focus:ring-2 focus:ring-purple-200 focus:outline-none"
+                                            rows={3}
+                                            placeholder="Type your answer or paste a link to your work here..."
+                                            value={submissionText}
+                                            onChange={e => setSubmissionText(e.target.value)}
+                                        />
+                                        <div className="flex gap-2">
+                                            <Button size="sm" onClick={() => handleSubmit(assignment.id)}>Submit Work</Button>
+                                            <Button size="sm" variant="ghost" onClick={() => setSubmittingId(null)}>Cancel</Button>
+                                        </div>
+                                    </div>
+                                )}
+                            </div>
+                        ) : (
+                            <div className="mt-4 pt-4 border-t flex items-center gap-2 text-sm text-gray-500">
+                                <FileText className="w-4 h-4" /> 
+                                <span>You submitted this on {new Date(assignment.submission.submitted_at).toLocaleDateString()}</span>
+                            </div>
+                        )}
+                    </CardContent>
+                </Card>
+            );
+        })}
+
+        {assignments.length === 0 && !loading && (
+             <div className="text-center p-12 text-gray-500 border-2 border-dashed rounded-lg bg-gray-50">
+                 <BookOpen className="w-12 h-12 mx-auto mb-2 opacity-20" />
+                 No assignments found for your class.
+             </div>
+        )}
+      </div>
+    </div>
+  );
+}
