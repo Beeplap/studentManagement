@@ -49,14 +49,13 @@ export default function AttendanceManager({ teacherId }) {
   const fetchDailyData = async () => {
     setLoading(true);
     try {
-      // 1. Get Class Details to find grade/course for student filtering
+      // 1. Get Class Details
       const cls = classes.find(c => c.id === selectedClassId);
       if (!cls) return;
 
       // 2. Fetch Students
-      // Assuming 'class' column in students matches criteria (e.g. grade/course)
-      // or we use a mapping. For simplicity, we filter by the class identifier string.
-      const classIdentifier = cls.grade || cls.course; 
+      // Constructing identifier: "BCA Sem-1" or "BBS Year-1"
+      const classIdentifier = `${cls.course} ${cls.course === 'BCA' ? 'Sem' : 'Year'}-${cls.semester}`; 
       
       const { data: studentsData } = await supabase
         .from("students")
@@ -74,7 +73,7 @@ export default function AttendanceManager({ teacherId }) {
           .select("*")
           .in("student_id", studentIds)
           .eq("date", selectedDate)
-          .eq("subject_id", selectedClassId); // Filter by specific subject class if needed
+          .eq("class_id", selectedClassId); // Filter by specific class
 
         const attendanceMap = {};
         attendanceData?.forEach(r => {
@@ -94,7 +93,7 @@ export default function AttendanceManager({ teacherId }) {
     try {
         const cls = classes.find(c => c.id === selectedClassId);
         if (!cls) return;
-        const classIdentifier = cls.grade || cls.course;
+        const classIdentifier = `${cls.course} ${cls.course === 'BCA' ? 'Sem' : 'Year'}-${cls.semester}`;
 
         // Fetch students to report on
         const { data: studentsData } = await supabase
@@ -117,7 +116,7 @@ export default function AttendanceManager({ teacherId }) {
             .from("attendance")
             .select("student_id, status, date")
             .in("student_id", studentIds)
-            // .eq("subject_id", selectedClassId) // Include if attendance is subject-specific
+            .eq("class_id", selectedClassId) // Include class specific history
             .gte("date", new Date(new Date().setMonth(new Date().getMonth() - 1)).toISOString().split('T')[0]); // Last 30 days default
 
         
@@ -163,14 +162,14 @@ export default function AttendanceManager({ teacherId }) {
         student_id: studentId,
         date: selectedDate,
         status: status,
-        subject_id: selectedClassId,
+        class_id: selectedClassId,
         marked_by: teacherId
       }));
 
       if (updates.length > 0) {
          const { error } = await supabase
            .from("attendance")
-           .upsert(updates, { onConflict: "student_id, date, subject_id" });
+           .upsert(updates, { onConflict: "student_id, date, class_id" });
          
          if (error) throw error;
          alert("Attendance saved successfully!");
@@ -223,7 +222,7 @@ export default function AttendanceManager({ teacherId }) {
                 <option value="">-- Select Class --</option>
                 {classes.map(c => (
                   <option key={c.id} value={c.id}>
-                    {c.subject} - {c.grade || c.course} ({c.section})
+                    {c.subject} - {c.course} {c.course === 'BCA' ? 'Sem' : 'Year'}-{c.semester} {c.section ? `(${c.section})` : ''}
                   </option>
                 ))}
               </select>

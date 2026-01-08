@@ -351,8 +351,8 @@ export default function AdminPage() {
                     {classes.map(c => (
                         <div key={c.id} className="flex justify-between p-3 bg-gray-50 rounded">
                             <div>
-                                <p className="font-semibold">{c.course}</p>
-                                <p className="text-xs text-gray-500">{c.semester} • {c.section}</p>
+                                <p className="font-semibold">{c.course} {c.course === 'BCA' ? 'Sem' : 'Year'}-{c.semester} {c.section && `(${c.section})`}</p>
+                                <p className="text-xs text-gray-500">{c.subject}</p>
                             </div>
                         </div>
                     ))}

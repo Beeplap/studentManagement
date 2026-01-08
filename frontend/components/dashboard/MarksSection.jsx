@@ -42,52 +42,21 @@ export default function MarksSection({ teacherId }) {
       const { data: studentsData } = await supabase
         .from("students")
         .select("*")
-        .eq("class", classes.find(c => c.id === selectedClass)?.grade || "") // Assuming 'grade' maps to class name for now, or use ID if schema links
-        // If your student's 'class' column stores the Class Name (e.g. "10A"), use that.
-        // If it stores a UUID, use selectedClass directly.
-        // Let's assume for now keeping consistent with AttendancePage which filtered by "class" string name.
-        // We need to match the class logic. Let's look at classes data first.
-        // Actually, let's try to filter by the class NAME first if that's how it's done elsewhere.
-        // BUT, the 'classes' table usually has 'grade' and 'section'.
-        // Let's assume we filter students by matching 'grade' + 'section' or just 'class' column in students.
-        // Simplified: Fetch students where class = selectedClass (if selectedClass is the name)
-        // OR fetch students and filter manually.
-        // LET'S USE THE CLASS ID if referencing foreign key, or Name if string.
-        // Re-reading AttendancePage: it uses `students.class` column string.
-        // We should map the selectedClass ID to the class string Name.
+        // We filter students by matching generic 'class' field to course/semester/section combo
+        // For simplicity, we assume students table 'class' column holds values like "BCA Sem-1" or "BBS Year-1"
+        // This requires 'students' data to match this format.
+        // Let's constructing the identifier from the class object.
+        .eq("class", selectedClassRecord ? `${selectedClassRecord.course} ${selectedClassRecord.course === 'BCA' ? 'Sem' : 'Year'}-${selectedClassRecord.semester}` : "")
         .order("roll", { ascending: true });
         
-      // For now, let's assume `classes` are fetched with ID, but we need to match `students.class` string.
-      // We will perform the match in the component.
+      // ... 
 
-      const selectedClassRecord = classes.find(c => c.id === selectedClass);
-      let classString = "";
-      if (selectedClassRecord) {
-          // Construct class string like "10-A" or use what's available.
-          // AttendancePage uses a distinct list of strings.
-          // Let's try to match that logic or just use what we have.
-          // We'll fetch all students and filter locally for safety or perform a better query if possible.
-          // Safer: fetch students where class string matches.
-          classString = `${selectedClassRecord.grade || selectedClassRecord.course}`; // Simplified
-          // Actually better to just fetch students where class equals the grade/course for now.
-      }
+      const classString = selectedClassRecord ? `${selectedClassRecord.course} ${selectedClassRecord.course === 'BCA' ? 'Sem' : 'Year'}-${selectedClassRecord.semester}` : "";
 
-
-      // Let's refine: The user selects a CLASS object. We need students of that class.
-      // If the schema is correct, `students` table has a `class_id` or `class` string.
-      // AttendancePage uses `class` string. 
-      // Let's try to query students by that string.
-      const matchString = selectedClassRecord ? selectedClassRecord.name || selectedClassRecord.subject : ""; // Fallback
-
-      // Correction: Attendance page just shows a list of unique class STRINGS.
-      // This components shows assigned classes (rows in 'classes' table).
-      // We need to bridge this. 
-      // We will use the 'grade' field from classes table to match 'class' field in students table for now.
-    
       const { data: matchedStudents } = await supabase
         .from("students")
         .select("*")
-        .eq("class", selectedClassRecord?.grade || selectedClassRecord?.course) 
+        .eq("class", classString) 
         .order("roll", { ascending: true });
 
       setStudents(matchedStudents || []);
@@ -98,7 +67,7 @@ export default function MarksSection({ teacherId }) {
         const { data: marksData } = await supabase
           .from("marks")
           .select("*")
-          .eq("subject_id", selectedClassRecord?.id) // Using class_id/subject_id as proxy for specific subject class
+          .eq("class_id", selectedClassRecord?.id) // Using class_id as identifier
           .eq("exam_type", examType)
           .in("student_id", studentIds);
 
@@ -124,7 +93,7 @@ export default function MarksSection({ teacherId }) {
     try {
       const updates = Object.entries(marks).map(([studentId, mark]) => ({
         student_id: studentId,
-        subject_id: selectedClass, // Using class ID as subject identifier for this specific teacher-class mapping
+        class_id: selectedClass, // Using class ID
         exam_type: examType,
         marks_obtained: mark,
         total_marks: maxMarks,
@@ -133,7 +102,7 @@ export default function MarksSection({ teacherId }) {
 
       const { error } = await supabase
         .from("marks")
-        .upsert(updates, { onConflict: "student_id, subject_id, exam_type" });
+        .upsert(updates, { onConflict: "student_id, class_id, exam_type" });
 
       if (error) throw error;
       alert("Marks saved successfully!");
@@ -161,11 +130,11 @@ export default function MarksSection({ teacherId }) {
               onChange={(e) => setSelectedClass(e.target.value)}
             >
               <option value="">-- Select Class --</option>
-              {classes.map(c => (
-                <option key={c.id} value={c.id}>
-                  {c.subject} - {c.grade || c.course} ({c.section})
-                </option>
-              ))}
+                {classes.map(c => (
+                  <option key={c.id} value={c.id}>
+                    {c.subject} - {c.course} {c.course === 'BCA' ? 'Sem' : 'Year'}-{c.semester} {c.section ? `(${c.section})` : ''}
+                  </option>
+                ))}
             </select>
           </div>
           <div>

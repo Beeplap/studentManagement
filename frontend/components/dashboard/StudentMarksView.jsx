@@ -18,15 +18,13 @@ export default function StudentMarksView({ studentId }) {
     // Assuming 'subject_id' refers to 'subjects' or 'classes'.
     // Given the schema, let's fetch raw marks first.
     
-    // NOTE: If subject_id maps to 'classes', we might settle for just showing the ID or fetching class name.
-    // Ideally we join.
+    // We join 'classes' to get subject/course details
     const { data, error } = await supabase
       .from("marks")
-      .select("*, subjects(subject_name, course_code)")
+      .select("*, classes(subject, course, semester, section)")
       .eq("student_id", studentId)
       .order("created_at", { ascending: false });
 
-    // Fallback if relation not set up: just show what we have
     if (data) setMarks(data);
     else if (error) console.error(error);
     
@@ -47,7 +45,7 @@ export default function StudentMarksView({ studentId }) {
                 <table className="w-full text-sm text-left">
                     <thead className="bg-gray-50 text-gray-700 uppercase">
                         <tr>
-                            <th className="px-6 py-3">Subject / Course</th>
+                            <th className="px-6 py-3">Class / Subject</th>
                             <th className="px-6 py-3">Exam Type</th>
                             <th className="px-6 py-3 text-center">Marks Obtained</th>
                             <th className="px-6 py-3 text-center">Total</th>
@@ -56,18 +54,21 @@ export default function StudentMarksView({ studentId }) {
                     </thead>
                     <tbody className="divide-y">
                         {marks.map((mark) => {
-                            const percentage = (mark.marks / mark.total) * 100;
-                            const isPass = percentage >= 40; // Default 40% threshold
+                            const percentage = (mark.marks_obtained / mark.total_marks) * 100;
+                            const isPass = percentage >= 40; 
+                            const cls = mark.classes;
 
                             return (
                                 <tr key={mark.id} className="hover:bg-gray-50">
                                     <td className="px-6 py-4 font-medium">
-                                        {mark.subjects?.subject_name || "Subject " + mark.subject_id.slice(0,4)}
-                                        {mark.subjects?.course_code && <span className="ml-2 text-xs text-gray-500">({mark.subjects.course_code})</span>}
+                                        {cls?.subject || "N/A"}
+                                        <span className="ml-2 text-xs text-gray-500">
+                                            ({cls?.course} {cls?.course === 'BCA' ? 'Sem' : 'Year'}-{cls?.semester} {cls?.section ? `(${cls.section})` : ''})
+                                        </span>
                                     </td>
-                                    <td className="px-6 py-4">{mark.exam_type || mark.exam_name}</td>
-                                    <td className="px-6 py-4 text-center font-bold text-gray-900">{mark.marks}</td>
-                                    <td className="px-6 py-4 text-center text-gray-500">{mark.total}</td>
+                                    <td className="px-6 py-4">{mark.exam_type}</td>
+                                    <td className="px-6 py-4 text-center font-bold text-gray-900">{mark.marks_obtained}</td>
+                                    <td className="px-6 py-4 text-center text-gray-500">{mark.total_marks}</td>
                                     <td className="px-6 py-4 text-center">
                                         <span className={`px-2 py-1 rounded text-xs font-bold uppercase ${isPass ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>
                                             {isPass ? "Pass" : "Fail"}
