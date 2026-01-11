@@ -25,9 +25,9 @@ export async function POST(request) {
       await request.json();
 
     // Validate inputs
-    if (!course || !subject || !teacher_id) {
+    if (!course || !subject || !teacher_id || !semester) {
       return NextResponse.json(
-        { error: "Course, subject, and teacher are required." },
+        { error: "Course, semester, subject, and teacher are required." },
         { status: 400 }
       );
     }
@@ -40,7 +40,7 @@ export async function POST(request) {
     if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
     const { data: profile } = await supabase
-      .from("profiles")
+      .from("users")
       .select("role")
       .eq("id", user.id)
       .single();
@@ -48,6 +48,14 @@ export async function POST(request) {
     if (profile?.role !== "admin") {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
+
+    // Validate if subject exists in that course/semester (Optional but good for data integrity)
+    // We assume 'course' passed here is the Course Name or Code. The subjects table has 'course_id'.
+    // If the frontend passes Course Code, we need to lookup.
+    // Ideally frontend passes standard values.
+    // For now, let's just insert. The cascading dropdowns in frontend will ensure validity.
+    // If we want strict backend validation, we need to join courses table.
+    // Let's rely on frontend for now to keep it simple as `classes` table schema is loose.
 
     // Insert class
     const { data: classData, error } = await supabase
@@ -82,9 +90,10 @@ export async function GET(request) {
       .from("classes")
       .select(`
         id, course, semester, subject, room_number, created_at,
-        teacher:profiles(id, full_name, email)
+        teacher:users(id, full_name, email)
       `)
       .order("created_at", { ascending: false });
+    // Note: Joined 'users' instead of 'profiles' based on admin page usage
 
     if (teacherId) query = query.eq("teacher_id", teacherId);
 
@@ -117,7 +126,7 @@ export async function DELETE(request) {
     if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
     const { data: profile } = await supabase
-      .from("profiles")
+      .from("users")
       .select("role")
       .eq("id", user.id)
       .single();
