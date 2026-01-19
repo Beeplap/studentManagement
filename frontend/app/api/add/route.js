@@ -33,9 +33,9 @@ export async function POST(req) {
     }
 
     if (role === "student") {
-      if (!gender || !studentClass || !phone_number) {
+      if (!gender || !body.batch_id || !phone_number) {
         return NextResponse.json(
-          { error: "Student requires gender, class, and phone number." },
+          { error: "Student requires gender, batch, and phone number." },
           { status: 400 }
         );
       }
@@ -128,8 +128,7 @@ export async function POST(req) {
         id: userId,
         roll: rollNumber,
         full_name,
-        class: studentClass,
-        section: section || null,
+        batch_id: body.batch_id, // New Link
         gender,
         phone_number,
         guardian_name: guardian_name || null,
