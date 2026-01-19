@@ -1,9 +1,10 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
-  devIndicators: false,
+  reactStrictMode: true,
+  devIndicators: {
+    buildActivity: false,
+  },
   distDir: ".next",
-  // Explicitly set the project root to the current directory
-  outputFileTracingRoot: process.cwd(),
 };
 
 export default nextConfig;
