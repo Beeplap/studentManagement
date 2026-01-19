@@ -34,6 +34,11 @@ export default function ManageCurriculum() {
     duration: 8
   });
 
+useEffect(() => {
+  if (!modalSuccess) return;
+  const t = setTimeout(() => setModalSuccess(""), 2000);
+  return () => clearTimeout(t);
+}, [modalSuccess]);
 
   useEffect(() => {
     fetchCoursesAndSubjects();
@@ -65,33 +70,50 @@ export default function ManageCurriculum() {
     setShowAddSubject(true);
   };
 
-  const handleAddSubjectSubmit = async () => {
-    setModalError("");
-    setModalSuccess("");
-    try {
-      if(!newSubject.name || !newSubject.code) {
-        throw new Error("Name and Code are required");
-      }
-      
-      const res = await fetch("/api/subjects", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(newSubject)
-      });
-      
-      if(!res.ok) {
-        const json = await res.json();
-        throw new Error(json.error || "Failed to add subject");
-      }
+const handleAddSubjectSubmit = async (closeAfter = false) => {
+  setModalError("");
+  setModalSuccess("");
 
-      setModalSuccess("Subject added successfully!");
-      fetchCoursesAndSubjects();
-      setTimeout(() => setShowAddSubject(false), 1000);
-      
-    } catch (error) {
-      setModalError(error.message);
+  try {
+    if (!newSubject.name || !newSubject.code) {
+      throw new Error("Name and Code are required");
     }
-  };
+
+    const res = await fetch("/api/subjects", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(newSubject)
+    });
+
+    const json = await res.json();
+
+    if (!res.ok) {
+      throw new Error(json.error || "Failed to add subject");
+    }
+
+    // ✅ Add subject instantly to UI (NO REFRESH)
+    setSubjects(prev => [...prev, json.subject]);
+
+    // ✅ Reset only form fields (keep course & semester)
+    setNewSubject(prev => ({
+      ...prev,
+      name: "",
+      code: "",
+      credits: 3,
+      type: "Core"
+    }));
+
+    setModalSuccess("Subject added successfully ");
+
+    if (closeAfter) {
+      setTimeout(() => setShowAddSubject(false), 300);
+    }
+
+  } catch (error) {
+    setModalError(error.message);
+  }
+};
+
 
   const handleAddCourseSubmit = async () => {
     setModalError("");
@@ -223,7 +245,7 @@ export default function ManageCurriculum() {
               <div className="space-y-4">
                   <div>
                       <label className="text-sm font-medium">Subject Name</label>
-                      <Input value={newSubject.name} onChange={e => setNewSubject({...newSubject, name: e.target.value})} placeholder="e.g. C Programming"/>
+                      <Input value={newSubject.name} onChange={e => setNewSubject({...newSubject, name: e.target.value})} />
                   </div>
                   <div>
                       <label className="text-sm font-medium">Subject Code</label>
@@ -248,10 +270,31 @@ export default function ManageCurriculum() {
                   </div>
               </div>
 
-              <div className="flex justify-end gap-2 mt-6">
-                  <Button variant="ghost" onClick={() => setShowAddSubject(false)}>Cancel</Button>
-                  <Button onClick={handleAddSubjectSubmit} className="bg-purple-600 text-white hover:bg-purple-700">Save Subject</Button>
-              </div>
+             <div className="flex justify-between mt-6">
+  <Button
+    variant="ghost"
+    onClick={() => setShowAddSubject(false)}
+  >
+    Close
+  </Button>
+
+  <div className="flex gap-2">
+    <Button
+      variant="outline"
+      onClick={() => handleAddSubjectSubmit(false)}
+    >
+      Add Another
+    </Button>
+
+    <Button
+      onClick={() => handleAddSubjectSubmit(true)}
+      className="bg-purple-600 text-white hover:bg-purple-700"
+    >
+      Add & Close
+    </Button>
+  </div>
+</div>
+
             </Dialog.Panel>
           </div>
         </Dialog>
