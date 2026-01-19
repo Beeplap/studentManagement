@@ -5,8 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Dialog } from "@headlessui/react";
 
-export default function ManageBatches() {
-  const [batches, setBatches] = useState([]);
+export default function ManageBatches({ batches = [], onChange }) {
   const [courses, setCourses] = useState([]);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -20,21 +19,8 @@ export default function ManageBatches() {
 
   // Fetch initial data
   useEffect(() => {
-    fetchBatches();
     fetchCourses();
   }, []);
-
-  const fetchBatches = async () => {
-    try {
-      const res = await fetch("/api/batches");
-      if (res.ok) {
-        const data = await res.json();
-        setBatches(data.batches || []);
-      }
-    } catch (error) {
-      console.error("Failed to fetch batches:", error);
-    }
-  };
 
   const fetchCourses = async () => {
     try {
@@ -60,7 +46,7 @@ export default function ManageBatches() {
 
       if (res.ok) {
         setIsModalOpen(false);
-        fetchBatches();
+        onChange?.();
         // Reset form but keep year/section as they might be repetitive
         setNewBatch((prev) => ({ ...prev, course_id: "", academic_unit: "" }));
       } else {
@@ -83,7 +69,7 @@ export default function ManageBatches() {
       return;
     try {
       const res = await fetch(`/api/batches?id=${id}`, { method: "DELETE" });
-      if (res.ok) fetchBatches();
+      if (res.ok) onChange?.();
       else alert("Failed to delete batch");
     } catch (error) {
       console.error("Error deleting batch:", error);
@@ -114,9 +100,21 @@ export default function ManageBatches() {
         <h3 className="text-lg font-semibold text-gray-800">
           Academic Batches
         </h3>
-        <Button onClick={() => setIsModalOpen(true)} className="bg-purple-600">
-          <Plus className="w-4 h-4 mr-2" /> Create Batch
-        </Button>
+        <div className="flex gap-2">
+          <Button
+            onClick={() => setIsModalOpen(true)}
+            className="bg-purple-600"
+          >
+            <Plus className="w-4 h-4 mr-2" /> Create Batch
+          </Button>
+
+          <Button
+            onClick={onChange}
+            className="bg-gray-600 hover:bg-gray-700 text-white"
+          >
+            Refresh
+          </Button>
+        </div>
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
