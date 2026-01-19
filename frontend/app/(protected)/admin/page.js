@@ -344,11 +344,7 @@ export default function AdminPage() {
              <AssignTeacher />
         </div>
 
-        {/* Unit 3: Curriculum Management */}
-        <div className="flex flex-col gap-4">
-            <h2 className="text-2xl font-bold border-b pb-2">Curriculum Setup</h2>
-            <ManageCurriculum />
-        </div>
+
     </div>
   );
 
@@ -586,6 +582,7 @@ export default function AdminPage() {
         {currentView === "students" && renderStudents()}
         {currentView === "teachers" && renderTeachers()}
         {currentView === "subjects" && renderAcademics()} 
+        {currentView === "curriculum" && <div className="animate-in fade-in slide-in-from-bottom-4 duration-500"><h2 className="text-2xl font-bold border-b pb-4 mb-6">Curriculum Management</h2><ManageCurriculum /></div>}
         {/* Note: Sidebar uses 'subjects' ID for Class & Subject Management */}
         {currentView === "attendance" && renderAttendance()}
         {currentView === "fees" && renderFees()}
