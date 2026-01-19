@@ -13,22 +13,40 @@ function createClient() {
         set: (name, value, options) => cookies().set(name, value, options),
         remove: (name, options) => cookies().delete(name, options),
       },
-    }
+    },
   );
 }
 
 // Middleware-like Admin Check
 async function checkAdmin(supabase) {
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user) return false;
+  const {
+    data: { user },
+    error: authError,
+  } = await supabase.auth.getUser();
+  if (authError || !user) {
+    console.error("checkAdmin: No user found", authError);
+    return { authorized: false, reason: "User not authenticated" };
+  }
 
-  const { data: profile } = await supabase
+  const { data: profile, error: profileError } = await supabase
     .from("users")
     .select("role")
     .eq("id", user.id)
     .single();
 
-  return profile?.role === "admin";
+  if (profileError || !profile) {
+    console.error("checkAdmin: Profile lookup failed", profileError);
+    return { authorized: false, reason: "Profile not found or access denied" };
+  }
+
+  if (profile.role !== "admin") {
+    return {
+      authorized: false,
+      reason: `Role mismatch: found '${profile.role}'`,
+    };
+  }
+
+  return { authorized: true };
 }
 
 // 🟢 GET: Fetch Batches
@@ -41,10 +59,12 @@ export async function GET(request) {
   try {
     let query = supabase
       .from("batches")
-      .select(`
+      .select(
+        `
         id, academic_unit, section, admission_year, is_active, created_at,
         course:courses(id, name, code)
-      `)
+      `,
+      )
       .order("admission_year", { ascending: false })
       .order("created_at", { ascending: false });
 
@@ -64,12 +84,18 @@ export async function GET(request) {
 // 🔵 POST: Create Batch (Admin Only)
 export async function POST(request) {
   const supabase = createClient();
-  if (!(await checkAdmin(supabase))) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  const authCheck = await checkAdmin(supabase);
+
+  if (!authCheck.authorized) {
+    return NextResponse.json(
+      { error: "Unauthorized: " + authCheck.reason },
+      { status: 401 },
+    );
   }
 
   try {
-    const { course_id, academic_unit, section, admission_year } = await request.json();
+    const { course_id, academic_unit, section, admission_year } =
+      await request.json();
 
     const { data: batch, error } = await supabase
       .from("batches")
@@ -89,13 +115,19 @@ export async function POST(request) {
 // 🟠 PATCH: Update Batch (Admin Only)
 export async function PATCH(request) {
   const supabase = createClient();
-  if (!(await checkAdmin(supabase))) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  const authCheck = await checkAdmin(supabase);
+
+  if (!authCheck.authorized) {
+    return NextResponse.json(
+      { error: "Unauthorized: " + authCheck.reason },
+      { status: 401 },
+    );
   }
 
   try {
     const { id, ...updates } = await request.json();
-    if (!id) return NextResponse.json({ error: "Batch ID required" }, { status: 400 });
+    if (!id)
+      return NextResponse.json({ error: "Batch ID required" }, { status: 400 });
 
     const { data: batch, error } = await supabase
       .from("batches")
@@ -116,14 +148,20 @@ export async function PATCH(request) {
 // 🔴 DELETE: Remove Batch (Admin Only)
 export async function DELETE(request) {
   const supabase = createClient();
-  if (!(await checkAdmin(supabase))) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  const authCheck = await checkAdmin(supabase);
+
+  if (!authCheck.authorized) {
+    return NextResponse.json(
+      { error: "Unauthorized: " + authCheck.reason },
+      { status: 401 },
+    );
   }
 
   try {
     const { searchParams } = new URL(request.url);
     const id = searchParams.get("id");
-    if (!id) return NextResponse.json({ error: "Batch ID required" }, { status: 400 });
+    if (!id)
+      return NextResponse.json({ error: "Batch ID required" }, { status: 400 });
 
     const { error } = await supabase.from("batches").delete().eq("id", id);
     if (error) throw error;

@@ -12,21 +12,39 @@ function createClient() {
         set: (name, value, options) => cookies().set(name, value, options),
         remove: (name, options) => cookies().delete(name, options),
       },
-    }
+    },
   );
 }
 
 async function checkAdmin(supabase) {
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user) return false;
+  const {
+    data: { user },
+    error: authError,
+  } = await supabase.auth.getUser();
+  if (authError || !user) {
+    console.error("checkAdmin: No user found", authError);
+    return { authorized: false, reason: "User not authenticated" };
+  }
 
-  const { data: profile } = await supabase
+  const { data: profile, error: profileError } = await supabase
     .from("users")
     .select("role")
     .eq("id", user.id)
     .single();
 
-  return profile?.role === "admin";
+  if (profileError || !profile) {
+    console.error("checkAdmin: Profile lookup failed", profileError);
+    return { authorized: false, reason: "Profile not found or access denied" };
+  }
+
+  if (profile.role !== "admin") {
+    return {
+      authorized: false,
+      reason: `Role mismatch: found '${profile.role}'`,
+    };
+  }
+
+  return { authorized: true };
 }
 
 // 🟢 GET: Fetch Assignments
@@ -39,12 +57,14 @@ export async function GET(request) {
   try {
     let query = supabase
       .from("teaching_assignments")
-      .select(`
+      .select(
+        `
         id, created_at,
         batch:batches(id, academic_unit, section, course:courses(code, name)),
         subject:subjects(id, name, code),
         teacher:users(id, full_name, email)
-      `)
+      `,
+      )
       .order("created_at", { ascending: false });
 
     if (batchId) query = query.eq("batch_id", batchId);
@@ -63,15 +83,23 @@ export async function GET(request) {
 // 🔵 POST: Assign Teacher (Admin Only)
 export async function POST(request) {
   const supabase = createClient();
-  if (!(await checkAdmin(supabase))) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  const authCheck = await checkAdmin(supabase);
+
+  if (!authCheck.authorized) {
+    return NextResponse.json(
+      { error: "Unauthorized: " + authCheck.reason },
+      { status: 401 },
+    );
   }
 
   try {
     const { batch_id, subject_id, teacher_id } = await request.json();
 
     if (!batch_id || !subject_id || !teacher_id) {
-        return NextResponse.json({ error: "Batch, Subject, and Teacher are required." }, { status: 400 });
+      return NextResponse.json(
+        { error: "Batch, Subject, and Teacher are required." },
+        { status: 400 },
+      );
     }
 
     const { data: assignment, error } = await supabase
@@ -82,7 +110,10 @@ export async function POST(request) {
 
     if (error) throw error;
 
-    return NextResponse.json({ message: "Teacher assigned successfully", assignment });
+    return NextResponse.json({
+      message: "Teacher assigned successfully",
+      assignment,
+    });
   } catch (error) {
     console.error("API Error [POST /teaching-assignments]:", error);
     return NextResponse.json({ error: error.message }, { status: 400 });
@@ -92,16 +123,28 @@ export async function POST(request) {
 // 🔴 DELETE: Remove Assignment (Admin Only)
 export async function DELETE(request) {
   const supabase = createClient();
-  if (!(await checkAdmin(supabase))) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  const authCheck = await checkAdmin(supabase);
+
+  if (!authCheck.authorized) {
+    return NextResponse.json(
+      { error: "Unauthorized: " + authCheck.reason },
+      { status: 401 },
+    );
   }
 
   try {
     const { searchParams } = new URL(request.url);
     const id = searchParams.get("id");
-    if (!id) return NextResponse.json({ error: "Assignment ID required" }, { status: 400 });
+    if (!id)
+      return NextResponse.json(
+        { error: "Assignment ID required" },
+        { status: 400 },
+      );
 
-    const { error } = await supabase.from("teaching_assignments").delete().eq("id", id);
+    const { error } = await supabase
+      .from("teaching_assignments")
+      .delete()
+      .eq("id", id);
     if (error) throw error;
 
     return NextResponse.json({ message: "Assignment removed successfully" });
