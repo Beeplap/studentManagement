@@ -4,11 +4,13 @@ import { Plus, Trash2, Calendar, Layers } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Dialog } from "@headlessui/react";
+import BatchDetailsModal from "./BatchDetailsModal";
 
 export default function ManageBatches({ batches = [], onChange }) {
   const [courses, setCourses] = useState([]);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [selectedBatch, setSelectedBatch] = useState(null);
 
   const [newBatch, setNewBatch] = useState({
     course_id: "",
@@ -121,7 +123,15 @@ export default function ManageBatches({ batches = [], onChange }) {
         {batches.map((batch) => (
           <div
             key={batch.id}
-            className="p-4 bg-white border rounded-lg shadow-sm hover:shadow-md transition-shadow relative group"
+            className="p-4 bg-white border rounded-lg shadow-sm hover:shadow-md transition-shadow relative group cursor-pointer"
+            onClick={() => {
+              // Open detailed view
+              import("./BatchDetailsModal").then((mod) => {
+                // Dynamic import or just use standard if top-level
+              });
+              // For simplicity, we'll assume it's imported at top or we set state
+              setSelectedBatch(batch);
+            }}
           >
             <h4 className="font-bold text-lg text-gray-800">
               {batch.course?.code}{" "}
@@ -147,13 +157,17 @@ export default function ManageBatches({ batches = [], onChange }) {
               variant="ghost"
               size="sm"
               className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 text-red-500 hover:text-red-700 hover:bg-red-50"
-              onClick={() => handleDeleteBatch(batch.id)}
+              onClick={(e) => {
+                e.stopPropagation(); // Prevent opening modal
+                handleDeleteBatch(batch.id);
+              }}
             >
               <Trash2 className="w-4 h-4" />
             </Button>
           </div>
         ))}
         {batches.length === 0 && (
+          // ... existing empty state
           <div className="col-span-full text-center py-8 text-gray-500 bg-gray-50 rounded-lg border border-dashed">
             No active batches found. Create one to get started.
           </div>
@@ -169,11 +183,16 @@ export default function ManageBatches({ batches = [], onChange }) {
         <div className="fixed inset-0 bg-black/30" aria-hidden="true" />
         <div className="fixed inset-0 flex items-center justify-center p-4">
           <Dialog.Panel className="w-full max-w-md rounded-lg bg-white p-6 shadow-xl">
+            {/* ... existing dialog content ... */}
             <Dialog.Title className="text-lg font-bold mb-4">
               Create New Batch
             </Dialog.Title>
-
             <div className="space-y-4">
+              {/* Re-implement form fields here as they were replaced by ellipsis in previous tool calls if confused, 
+                   but effectively we just want to keep them or restoration. 
+                   Wait, I am inside replacement content, I should include the form here to be safe or just close it up 
+               */}
+              {/* Minimal restoration of the Create Batch Form logic for context */}
               <div>
                 <label className="block text-sm font-medium mb-1">Course</label>
                 <select
@@ -202,7 +221,6 @@ export default function ManageBatches({ batches = [], onChange }) {
                     ? `${getCourseType()} Selection`
                     : "Academic Unit"}
                 </label>
-
                 <select
                   className="w-full border rounded p-2"
                   value={newBatch.academic_unit}
@@ -216,7 +234,6 @@ export default function ManageBatches({ batches = [], onChange }) {
                       ? `Select ${getCourseType()}`
                       : "Academic Unit"}
                   </option>
-
                   {getAcademicUnitOptions().map((unit) => (
                     <option key={unit.value} value={unit.value}>
                       {unit.label}
@@ -241,9 +258,7 @@ export default function ManageBatches({ batches = [], onChange }) {
                   />
                 </div>
                 <div>
-                  <label className="block text-sm font-medium mb-1">
-                    Admission Year
-                  </label>
+                  <label className="block text-sm font-medium mb-1">Year</label>
                   <input
                     type="number"
                     className="w-full border rounded p-2"
@@ -274,6 +289,15 @@ export default function ManageBatches({ batches = [], onChange }) {
           </Dialog.Panel>
         </div>
       </Dialog>
+
+      {/* Detail Modal */}
+      {selectedBatch && (
+        <BatchDetailsModal
+          batch={selectedBatch}
+          isOpen={!!selectedBatch}
+          onClose={() => setSelectedBatch(null)}
+        />
+      )}
     </div>
   );
 }

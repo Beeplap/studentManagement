@@ -798,11 +798,12 @@ export default function AdminPage() {
 
       {/* Modals */}
       {/* Modals */}
+      {/* Modals */}
       <AddUser
-        open={showAddUser}
+        isOpen={showAddUser}
         onClose={() => setShowAddUser(false)}
         onUserAdded={fetchAllData}
-        defaultRole={addUserRole}
+        userType={addUserRole}
       />
     </div>
   );
