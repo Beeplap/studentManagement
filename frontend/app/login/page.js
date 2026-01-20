@@ -58,7 +58,7 @@ export default function LoginPage() {
             "User role:",
             profileData.role,
             "Email:",
-            profileData.email
+            profileData.email,
           );
           switch (profileData.role) {
             case "admin":
@@ -189,6 +189,18 @@ export default function LoginPage() {
               "Sign In"
             )}
           </button>
+
+          <div className="text-center mt-4">
+            <p className="text-sm text-gray-600">
+              New Student?{" "}
+              <a
+                href="/signup"
+                className="font-medium text-purple-600 hover:text-purple-500 transition-colors"
+              >
+                Register Here
+              </a>
+            </p>
+          </div>
         </form>
       </div>
     </div>
